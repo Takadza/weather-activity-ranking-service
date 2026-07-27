@@ -1,0 +1,1 @@
+# weather-activity-ranking-service
