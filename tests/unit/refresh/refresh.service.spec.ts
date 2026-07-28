@@ -167,4 +167,30 @@ describe('RefreshService.runCycle', () => {
     expect(recordRefreshSuccess).toHaveBeenCalledTimes(1);
     expect(recordRefreshFailure).not.toHaveBeenCalled();
   });
+
+  it('falls back to default concurrency when config is non-finite', async () => {
+    const locations = Array.from({ length: 3 }, (_, i) =>
+      location(`loc-${i}`, i, i),
+    );
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const fetchForecast = jest.fn(async () => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 20));
+      inFlight -= 1;
+      return [day];
+    });
+    const { service } = makeService({
+      locations,
+      fetchForecast,
+      refreshConcurrency: Number.NaN,
+    });
+
+    await service.runCycle();
+
+    expect(fetchForecast).toHaveBeenCalledTimes(3);
+    expect(maxInFlight).toBeGreaterThan(0);
+    expect(maxInFlight).toBeLessThanOrEqual(5);
+  });
 });

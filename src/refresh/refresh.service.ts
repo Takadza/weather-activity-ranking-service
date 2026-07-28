@@ -22,7 +22,11 @@ export class RefreshService {
 
   async runCycle(): Promise<void> {
     const tracked = await this.locations.listTrackedLocations();
-    const concurrency = this.config.get<number>('refreshConcurrency', 5);
+    const configured = this.config.get<number>('refreshConcurrency', 5);
+    const concurrency =
+      Number.isFinite(configured) && configured > 0
+        ? Math.floor(configured)
+        : 5;
     const failures: string[] = [];
 
     await mapPool(tracked, concurrency, async (location) => {
