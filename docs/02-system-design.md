@@ -19,13 +19,13 @@ Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation
 
 ## 2. High-level architecture
 
-**Style: modular monolith** — one TypeScript codebase, one Docker image, clear internal modules. Optional second process entrypoint for the refresh worker (same image, different command).
+**Style: NestJS modular monolith** — one TypeScript codebase, one Docker image, Nest modules aligned to domain seams. Optional second process entrypoint for the refresh worker (same image, different command / Nest context).
 
 ```
-Client → [LB*] → API (GraphQL) → Store (Postgres)
+Client → [LB*] → NestJS GraphQL API → Store (Postgres)
                       ↓
                    Scorer (pure)
-Refresh worker → Open-Meteo → Store (idempotent upserts)
+Refresh worker (Nest entry) → Open-Meteo → Store (idempotent upserts)
 ```
 
 \* Load balancer is a **scale add-on**, not part of the v1 take-home provisioned stack.
@@ -45,16 +45,18 @@ Refresh worker → Open-Meteo → Store (idempotent upserts)
 
 Render with any PlantUML runner (IDE plugin, `plantuml.jar`, or [plantuml.com](https://www.plantuml.com/plantuml)). Sources are the source of truth—do not invent architecture that contradicts them.
 
-### 2.2 Module responsibilities
+### 2.2 Module responsibilities (Nest modules)
 
-| Module | Responsibility | Depends on |
+| Nest module / area | Responsibility | Depends on |
 |---|---|---|
-| `graphql` | Schema, resolvers, input validation, response shaping | `store`, `scoring`, `geocoding` |
-| `scoring` | Pure, versioned activity scores from weather features | none (no I/O) |
-| `store` | Postgres access, upserts, geocode cache, refresh metadata | Prisma / Postgres |
-| `refresh` | Scheduled fetch loop, concurrency limits, outcome logging | `store`, `open-meteo`, `scoring` |
-| `open-meteo` | HTTP client, retry/backoff, circuit breaker | Open-Meteo |
-| `geocoding` | Name → candidates; cache via `store` | `store`, `open-meteo` |
+| `GraphqlModule` / resolvers | Schema, resolvers, input validation, response shaping | Store, Scoring, Geocoding |
+| `ScoringModule` | Pure, versioned activity scores from weather features | none (no I/O) |
+| `StoreModule` (Prisma) | Postgres access, upserts, geocode cache, refresh metadata | Prisma / Postgres |
+| `RefreshModule` | Scheduled fetch loop, concurrency limits, outcome logging | Store, OpenMeteo, Scoring |
+| `OpenMeteoModule` | HTTP client, retry/backoff, circuit breaker | Open-Meteo |
+| `GeocodingModule` | Name → candidates; cache via store | Store, OpenMeteo |
+| `HealthModule` | `GET /health` | Store / RefreshMeta |
+| `ConfigModule` | Env (`REFRESH_INTERVAL_MS`, timeouts, etc.) | — |
 
 ---
 
@@ -73,6 +75,8 @@ Reads and writes are causally independent (`01` §6): user QPS does not drive Op
 ## 4. Horizontal scaling & edge posture
 
 Traffic is **unknown**. We design for scale without building unused infra.
+
+Assumption to state: design envelope includes **~10M requests/day** (order-of-magnitude). That is still horizontal Nest API replicas + Postgres — not a reason to start with microservices or serverless.
 
 ### 4.1 Scale ladder
 
@@ -112,10 +116,10 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 
 ## 5. Technology ADRs
 
-### ADR-001 — Modular monolith (not microservices)
+### ADR-001 — NestJS modular monolith (not microservices)
 
-- **Decision:** One deployable service with internal modules; optional `api` / `worker` process split via entrypoint.
-- **Why:** Unknown/low traffic; team-of-one take-home; network boundaries would add latency and ops without scale win. Module seams preserve the option to extract the worker later.
+- **Decision:** One NestJS deployable with domain modules; optional `api` / `worker` process split via entrypoint (`main.ts` vs `worker.ts`).
+- **Why:** Matches Collinson Nest BE practice; unknown→~10M req/day still doesn’t justify service mesh. Module seams preserve a future extract of the worker.
 - **Rejected:** Microservices per activity or separate geocode/forecast services—premature.
 - **Scale trigger:** Split worker deploy when refresh cadence or resource profile diverges from API.
 
@@ -133,11 +137,13 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 - **Rejected:** SQLite as primary; DynamoDB/NoSQL (weaker fit for relational forecast rows + upserts in this exercise).
 - **Scale trigger:** PgBouncer / read replicas when DB—not the app—is the bottleneck.
 
-### ADR-004 — Apollo Server (GraphQL) on TypeScript/Node
+### ADR-004 — NestJS + GraphQL (Apollo driver) on TypeScript/Node
 
-- **Decision:** TypeScript (brief mandate) + Apollo Server standalone for `POST /graphql`.
-- **Why:** Matches stack constraint; mature TS typing story; playground useful for README demos.
-- **Rejected:** REST wrapper “plus GraphQL later”; gRPC (out of brief).
+- **Decision:** **NestJS** modular monolith with GraphQL via the **Apollo driver** (`@nestjs/graphql` + `@nestjs/apollo`). Schema-first: load SDL from `docs/contracts/schema.graphql`. TypeScript (brief mandate).
+- **Why:** Collinson’s backend already uses NestJS — matching their production structure (modules, DI, providers) makes the submission reviewable in their idiom and treats the exercise like a production app. Nest does **not** replace the scale design; it hosts the same stateless API + worker seams. GraphQL remains the brief-mandated API style; Apollo is the GraphQL engine under Nest.
+- **Rejected:** Standalone Apollo Server without Nest (fine for a minimal demo, weaker company fit); REST wrapper “plus GraphQL later”; gRPC (out of brief).
+- **Scale note:** Target planning envelope ~**10M requests/day** (~100–250 avg QPS, ~1k peak with burst) still means **horizontal Nest API replicas + Postgres**, not microservices. Nest modules ≠ distributed services.
+- **Worker:** Separate Nest application context / entrypoint (`worker.ts`) with schedule or interval provider — same Docker image, different command — so refresh stays decoupled from request threads.
 
 ### ADR-005 — In-process cache now; Redis later
 
@@ -160,10 +166,10 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 | Layer | Choice |
 |---|---|
 | Language | TypeScript on Node.js |
-| API | Apollo Server + GraphQL |
+| API | NestJS + GraphQL (Apollo driver), schema-first SDL |
 | Persistence | PostgreSQL + Prisma |
 | Weather | Open-Meteo (forecast + geocoding) |
-| Runtime shape | Modular monolith, Docker |
+| Runtime shape | Nest modular monolith, Docker (`api` + `worker` entrypoints) |
 | Cache (v1) | In-process TTL |
 | CI | GitHub Actions (see `05`) |
 

@@ -26,7 +26,7 @@ Clarify (01) → Design (02→05 + contracts + diagrams) → TDD plan → Code �
 | GraphQL API | [contracts/schema.graphql](contracts/schema.graphql) |
 | Example queries | [contracts/examples.graphql](contracts/examples.graphql) |
 | Database models | [contracts/prisma-schema.md](contracts/prisma-schema.md) |
-| Scoring algorithm | Exact steps in TDD plan Task 2; narrative in [03](03-api-and-domain-design.md) §5 |
+| Framework | NestJS (GraphQL Apollo driver) | [02 ADR-004](02-system-design.md) |
 | Refresh interval env | `REFRESH_INTERVAL_MS` (milliseconds), default `21600000` (6h) |
 
 ## Previous / Next

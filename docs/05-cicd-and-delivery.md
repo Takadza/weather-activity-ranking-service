@@ -21,16 +21,17 @@ Depends on: [`02-system-design.md`](02-system-design.md).
 
 ```
 .github/workflows/ci.yml
-Dockerfile                 # multi-stage: deps → build → runtime
-docker-compose.yml         # api (+ optional worker) + postgres
+Dockerfile
+docker-compose.yml
 .env.example
 package.json
+nest-cli.json
 prisma/
-src/
+src/          # NestJS modules (see TDD plan)
 docs/
 ```
 
-Exact `src/` tree is decided in the TDD/implementation plan; keep modules aligned with `02` (`graphql`, `scoring`, `store`, `refresh`, `open-meteo`, `geocoding`).
+Exact Nest module tree is in the TDD plan; keep modules aligned with `02` (`Graphql`, `Scoring`, `Store`, `Refresh`, `OpenMeteo`, `Geocoding`, `Health`).
 
 ---
 

@@ -2,7 +2,7 @@
 
 Backend take-home (Collinson Senior / Lead): rank the next 7 days for **skiing**, **surfing**, **outdoor sightseeing**, and **indoor sightseeing** using **Open-Meteo** data.
 
-**Stack:** TypeScript · Node.js · GraphQL (Apollo) · PostgreSQL · Docker · GitHub Actions  
+**Stack:** TypeScript · Node.js · **NestJS** · GraphQL (Apollo driver) · PostgreSQL · Docker · GitHub Actions  
 **Scope:** Backend only — no frontend. Focused submission over exhaustive features.
 
 ---

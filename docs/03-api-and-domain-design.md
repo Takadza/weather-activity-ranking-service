@@ -21,7 +21,7 @@ See [`contracts/README.md`](contracts/README.md) for the canonical consumer guid
 
 - **Content-Type:** `application/json` with GraphQL body `{ "query": "...", "variables": { ... } }`
 - **Auth (v1):** none. Resolvers/middleware structured so an API key or rate-limit layer can wrap the HTTP server later (`01` Security NFR)
-- **Playground:** Apollo Sandbox / landing page in non-production for manual demos
+- **Playground:** Nest GraphQL playground / Apollo Sandbox in non-production for manual demos
 
 Consumers **must** handle freshness fields on every successful ranking payload: `lastUpdated`, `dataAgeSeconds`, `stale`.
 

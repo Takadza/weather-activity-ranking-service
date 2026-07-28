@@ -4,214 +4,127 @@
 
 **Goal:** Build a TypeScript/Node GraphQL backend that ranks the next 7 days for skiing, surfing, outdoor sightseeing, and indoor sightseeing from persisted Open-Meteo data, with a decoupled refresh worker, Docker Compose, and GitHub Actions CI.
 
-**Architecture:** Modular monolith — pure `scoring`, Prisma `store`, `open-meteo` client (retry + circuit breaker), `geocoding`, Apollo GraphQL API, and a schedule-driven `refresh` worker. Warm path reads Postgres only; cold-start is the bounded Open-Meteo exception. Scores are compute-on-read.
+**Architecture:** NestJS modular monolith — pure `ScoringModule`, Prisma `StoreModule`, `OpenMeteoModule` (retry + circuit breaker), `GeocodingModule`, GraphQL via Nest Apollo driver (schema-first SDL), and a schedule-driven `RefreshModule` on a separate worker entrypoint. Warm path reads Postgres only; cold-start is the bounded Open-Meteo exception. Scores are compute-on-read. Nest chosen to match Collinson’s BE stack; scale still via stateless replicas + Postgres ladder (~10M req/day envelope).
 
-**Tech Stack:** TypeScript, Node.js 22, Apollo Server 4, Prisma, PostgreSQL 16, Vitest, Docker Compose, GitHub Actions.
+**Tech Stack:** TypeScript, Node.js 22, NestJS 10+, `@nestjs/graphql` + `@nestjs/apollo`, Prisma, PostgreSQL 16, Vitest (or Jest), Docker Compose, GitHub Actions.
 
 ## Global Constraints
 
 - Language: TypeScript on Node.js (assessment requirement)
-- API: GraphQL only (Apollo); consumer SDL: `docs/contracts/schema.graphql`
+- Framework: **NestJS** modular monolith (company BE alignment)
+- API: GraphQL only via Nest Apollo driver; consumer SDL: `docs/contracts/schema.graphql` (schema-first)
 - Weather: Open-Meteo; persist forecasts; warm path must not call Open-Meteo
 - Storage: PostgreSQL + Prisma per `docs/contracts/prisma-schema.md`
-- Scoring: pure/deterministic; `rubricVersion: "2026-07-28.1"`; unit-testable without DB/HTTP
+- Scoring: pure/deterministic; `rubricVersion: "2026-07-28.1"`; unit-testable without DB/HTTP / Nest context where possible
 - Backend only: no frontend
 - Focused submission: cuts in `docs/04-operations-and-failure-modes.md`
 - Design docs: `docs/01`–`docs/05` and `docs/diagrams/*.puml` are normative
+- Scale posture: design for ~10M req/day via horizontal API replicas; do not introduce microservices in v1
 
 ## File structure (target)
 
 ```
 package.json
 tsconfig.json
-vitest.config.ts
+nest-cli.json
+vitest.config.ts   # or jest config if using Nest default Jest
 .env.example
 prisma/schema.prisma
 src/
-  config.ts
-  api.ts
-  worker.ts
+  main.ts                 # API Nest bootstrap
+  worker.ts               # Worker Nest bootstrap (RefreshModule only / AppWorkerModule)
+  app.module.ts           # API root module
+  app.worker.module.ts    # Worker root module
+  config/
+    config.module.ts
+    configuration.ts
   scoring/
+    scoring.module.ts
+    scoring.service.ts      # pure rubric + rank (no Prisma)
     types.ts
-    rubric.ts
-    rank.ts
-    index.ts
   store/
-    prisma.ts
-    locations.ts
-    forecasts.ts
-    geocode-cache.ts
-    refresh-meta.ts
+    store.module.ts
+    prisma.service.ts
+    locations.repository.ts
+    forecasts.repository.ts
+    geocode-cache.repository.ts
+    refresh-meta.repository.ts
   open-meteo/
-    client.ts
+    open-meteo.module.ts
+    open-meteo.client.ts
     circuit-breaker.ts
-    types.ts
   geocoding/
-    resolve.ts
+    geocoding.module.ts
+    geocoding.service.ts
   graphql/
-    schema.ts
-    resolvers.ts
-    server.ts
+    graphql.module.ts       # GraphQLModule.forRoot schema-first
+    activity-ranking.resolver.ts
+    health.resolver.ts      # optional GraphQL health
   refresh/
-    job.ts
+    refresh.module.ts
+    refresh.service.ts
+    refresh.scheduler.ts
   health/
-    handler.ts
+    health.controller.ts    # GET /health
+docs/contracts/
+.github/workflows/ci.yml
+Dockerfile
+docker-compose.yml
 tests/
   unit/scoring/
   unit/open-meteo/
   unit/geocoding/
   unit/refresh/
   integration/
-docs/contracts/   # already frozen — do not diverge
-.github/workflows/ci.yml
-Dockerfile
-docker-compose.yml
 ```
 
+**Nest note:** Keep scoring logic framework-agnostic inside `ScoringService` methods so unit tests can `new ScoringService()` or test the pure functions without a full Nest testing module. Use `@nestjs/testing` for resolvers/integration.
 ---
 
-### Task 1: Project scaffold
+### Task 1: NestJS project scaffold
 
 **Files:**
-- Create: `package.json`, `tsconfig.json`, `vitest.config.ts`, `.env.example`, `.gitignore`
-- Create: `src/config.ts`, `src/scoring/.gitkeep` (placeholder dirs via real files in later tasks)
+- Create: `package.json`, `tsconfig.json`, `nest-cli.json`, `vitest.config.ts` (or Jest), `.env.example`, `.gitignore`
+- Create: `src/main.ts`, `src/app.module.ts`, `src/config/configuration.ts`
 
 **Interfaces:**
-- Produces: npm scripts `lint`, `typecheck`, `test`, `build`, `dev`, `worker`
+- Produces: npm scripts `start:dev`, `start:worker:dev`, `build`, `start`, `start:worker`, `typecheck`, `lint`, `test`
 
-- [ ] **Step 1: Create `package.json`**
+- [ ] **Step 1: Scaffold Nest app**
 
-```json
-{
-  "name": "weather-activity-ranking-service",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "engines": { "node": ">=22" },
-  "scripts": {
-    "dev": "tsx watch src/api.ts",
-    "worker": "tsx watch src/worker.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/api.js",
-    "start:worker": "node dist/worker.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "eslint .",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
-  }
-}
-```
-
-- [ ] **Step 2: Add TypeScript + Vitest + ESLint deps**
-
-Run:
+Prefer:
 
 ```bash
-npm install @apollo/server graphql @prisma/client dotenv
-npm install -D typescript tsx vitest @types/node prisma eslint typescript-eslint @eslint/js
+npx @nestjs/cli@latest new weather-activity-ranking-service --package-manager npm --skip-git
 ```
 
-- [ ] **Step 3: Create `tsconfig.json` and `vitest.config.ts`**
+Or manually create Nest layout. Ensure project lives at repo root (move files up if CLI creates a subfolder).
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "outDir": "dist",
-    "rootDir": "src",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "declaration": true,
-    "resolveJsonModule": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
-}
-```
-
-```ts
-// vitest.config.ts
-import { defineConfig } from "vitest/config";
-
-export default defineConfig({
-  test: {
-    include: ["tests/**/*.test.ts"],
-    environment: "node",
-  },
-});
-```
-
-Note: for Vitest to import from `src/`, either set `"rootDir"` loosely or add a separate `tsconfig` — prefer adding path alias or including tests with:
-
-```json
-"include": ["src/**/*"],
-```
-
-and import via relative paths from `tests/` into `../src/...`. Add a second `tsconfig.build.json` for `outDir` if needed later.
-
-- [ ] **Step 4: Create `.env.example` and `.gitignore`**
-
-```env
-DATABASE_URL=postgresql://wars:wars@localhost:5432/wars?schema=public
-PORT=4000
-REFRESH_INTERVAL_MS=21600000
-REFRESH_CONCURRENCY=5
-OPEN_METEO_TIMEOUT_MS=5000
-COLD_START_TIMEOUT_MS=3000
-STALE_AFTER_SECONDS=21600
-LOG_LEVEL=info
-```
-
-```gitignore
-node_modules/
-dist/
-.env
-coverage/
-*.log
-```
-
-- [ ] **Step 5: Create `src/config.ts`**
-
-```ts
-import "dotenv/config";
-
-function intEnv(name: string, fallback: number): number {
-  const raw = process.env[name];
-  if (raw === undefined || raw === "") return fallback;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) throw new Error(`Invalid ${name}`);
-  return n;
-}
-
-export const config = {
-  port: intEnv("PORT", 4000),
-  databaseUrl: process.env.DATABASE_URL ?? "",
-  refreshIntervalMs: intEnv("REFRESH_INTERVAL_MS", 6 * 60 * 60 * 1000),
-  refreshConcurrency: intEnv("REFRESH_CONCURRENCY", 5),
-  openMeteoTimeoutMs: intEnv("OPEN_METEO_TIMEOUT_MS", 5000),
-  coldStartTimeoutMs: intEnv("COLD_START_TIMEOUT_MS", 3000),
-  staleAfterSeconds: intEnv("STALE_AFTER_SECONDS", 6 * 60 * 60),
-  logLevel: process.env.LOG_LEVEL ?? "info",
-  rubricVersion: "2026-07-28.1" as const,
-};
-```
-
-- [ ] **Step 6: Verify typecheck passes on empty/config-only project**
-
-Run: `npx tsc -p tsconfig.json --noEmit`  
-Expected: PASS (or only missing entry — ensure `src/config.ts` is included)
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 2: Add GraphQL + Prisma + config deps**
 
 ```bash
-git add package.json package-lock.json tsconfig.json vitest.config.ts .env.example .gitignore src/config.ts
+npm install @nestjs/graphql @nestjs/apollo @apollo/server graphql @nestjs/config @prisma/client
+npm install -D prisma
+```
+
+- [ ] **Step 3: Wire `ConfigModule` + `.env.example`**
+
+Env keys (unchanged): `DATABASE_URL`, `PORT`, `REFRESH_INTERVAL_MS`, `REFRESH_CONCURRENCY`, `OPEN_METEO_TIMEOUT_MS`, `COLD_START_TIMEOUT_MS`, `STALE_AFTER_SECONDS`, `LOG_LEVEL`.
+
+- [ ] **Step 4: Empty `AppModule` boots**
+
+```bash
+npm run start:dev
+```
+
+Expected: Nest listens (GraphQL can be added in Task 6).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add package.json package-lock.json tsconfig.json nest-cli.json src .env.example .gitignore
 git commit -m "$(cat <<'EOF'
-chore: scaffold TypeScript project with Vitest and config
+chore: scaffold NestJS app with config module
 
 EOF
 )"
@@ -222,17 +135,12 @@ EOF
 ### Task 2: Scoring module (TDD)
 
 **Files:**
-- Create: `src/scoring/types.ts`, `src/scoring/rubric.ts`, `src/scoring/rank.ts`, `src/scoring/index.ts`
+- Create: `src/scoring/types.ts`, `src/scoring/scoring.service.ts`, `src/scoring/scoring.module.ts`
 - Test: `tests/unit/scoring/rubric.test.ts`, `tests/unit/scoring/rank.test.ts`
 
 **Interfaces:**
-- Produces:
-  - `export type ActivityType = "SKIING" | "SURFING" | "OUTDOOR_SIGHTSEEING" | "INDOOR_SIGHTSEEING"`
-  - `export type WeatherDay = { date: string; tempMaxC: number | null; tempMinC: number | null; precipMm: number | null; precipProbPct: number | null; windMaxKmh: number | null; snowfallCm: number | null; waveHeightM: number | null; weatherCode: number | null }`
-  - `export type DayScore = { date: string; score: number | null; available: boolean; reasonCodes: string[] }`
-  - `export function scoreDay(activity: ActivityType, day: WeatherDay): DayScore`
-  - `export function scoreAll(days: WeatherDay[]): { activity: ActivityType; overallScore: number | null; rank: number; days: DayScore[] }[]`
-  - `export const RUBRIC_VERSION = "2026-07-28.1"`
+- Produces: `ScoringService.scoreDay(...)`, `ScoringService.scoreAll(...)`, `RUBRIC_VERSION` — pure logic, no Nest/Prisma inside the algorithms
+- Import in tests from `scoring.service.ts` (or extracted pure functions) **without** creating a Nest testing module for Task 2
 
 - [ ] **Step 1: Write failing skiing / surfing tests**
 
@@ -632,36 +540,37 @@ EOF
 
 ---
 
-### Task 6: GraphQL API (warm path + cold-start)
+### Task 6: Nest GraphQL API (warm path + cold-start)
 
 **Files:**
-- Create: `src/graphql/schema.ts`, `src/graphql/resolvers.ts`, `src/graphql/server.ts`, `src/api.ts`
-- Copy or read: schema from `docs/contracts/schema.graphql` (load via `fs.readFileSync` at startup)
-- Test: `tests/integration/graphql.activityRanking.test.ts`
+- Create: `src/graphql/graphql.module.ts`, `src/graphql/activity-ranking.resolver.ts`
+- Load schema-first from `docs/contracts/schema.graphql` via `GraphQLModule.forRoot({ typePaths: [...], driver: ApolloDriver })`
+- Modify: `src/app.module.ts`
+- Test: `tests/integration/graphql.activityRanking.test.ts` (Nest testing module or HTTP against bootstrapped app)
 
 **Interfaces:**
-- Consumes: resolve, getForecastDays, upsertForecastDays, fetchForecast, scoreAll, config
-- Produces: Apollo Server on `POST /graphql`
+- Consumes: GeocodingService, ForecastsRepository, OpenMeteoClient, ScoringService, ConfigService
+- Produces: Nest GraphQL on `POST /graphql`
 
-Flow (`activityRanking`):
+Flow (`activityRanking` resolver) — unchanged from design:
 1. Validate input
-2. `resolveLocationInput`
-3. `getForecastDays` — if empty, cold-start: `fetchForecast` with `AbortSignal.timeout(coldStartTimeoutMs)`, upsert, then reload
+2. Resolve location
+3. Load forecast days — if empty, cold-start fetch + upsert within timeout
 4. If still empty → GraphQL error `PROVIDER_UNAVAILABLE`
-5. `scoreAll` → shape payload with `rubricVersion`, `lastUpdated` = max `fetchedAt`, `dataAgeSeconds`, `stale`
+5. `scoreAll` → payload with freshness fields
 
-- [ ] **Step 1: Write integration test for warm path with seeded DB + mocked Open-Meteo (must not be called)**
+- [ ] **Step 1: Write integration test for warm path (Open-Meteo must not be called)**
 
-- [ ] **Step 2: Implement schema load + resolvers + `api.ts`; warm path PASS**
+- [ ] **Step 2: Implement GraphQL module + resolver; warm path PASS**
 
-- [ ] **Step 3: Write cold-start test — empty DB, mock fetch returns 7 days, assert upsert + rankings**
+- [ ] **Step 3: Cold-start test PASS**
 
-- [ ] **Step 4: Cold-start PASS; commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add src/graphql src/api.ts tests/integration/graphql.activityRanking.test.ts
+git add src/graphql src/app.module.ts tests/integration/graphql.activityRanking.test.ts
 git commit -m "$(cat <<'EOF'
-feat: add GraphQL activityRanking warm and cold-start paths
+feat: add Nest GraphQL activityRanking warm and cold-start paths
 
 EOF
 )"
@@ -669,26 +578,27 @@ EOF
 
 ---
 
-### Task 7: Refresh worker
+### Task 7: Refresh worker (Nest worker entrypoint)
 
 **Files:**
-- Create: `src/refresh/job.ts`, `src/worker.ts`
-- Test: `tests/unit/refresh/job.test.ts`
+- Create: `src/refresh/refresh.module.ts`, `src/refresh/refresh.service.ts`, `src/refresh/refresh.scheduler.ts`
+- Create: `src/app.worker.module.ts`, `src/worker.ts` (NestFactory.createApplicationContext)
+- Test: `tests/unit/refresh/refresh.service.test.ts`
 
 **Interfaces:**
-- Produces: `runRefreshCycle(deps): Promise<void>` — list locations, concurrency pool, fetch+upsert, update RefreshMeta; never delete on failure
-- `worker.ts` sets interval from `config.refreshIntervalMs`
+- Produces: `RefreshService.runCycle()` — list locations, concurrency pool, fetch+upsert, update RefreshMeta
+- Worker process schedules via `@Interval` / `@Cron` from `REFRESH_INTERVAL_MS` (or manual setInterval in bootstrap)
 
-- [ ] **Step 1: Write test — two locations, one fetch fails, other succeeds; assert success upsert + meta records attempt; failed location retains prior days**
+- [ ] **Step 1: Write failing cycle test (mock OpenMeteo + repositories)**
 
-- [ ] **Step 2: Implement job + worker entry; tests PASS**
+- [ ] **Step 2: Implement; PASS**
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/refresh src/worker.ts tests/unit/refresh
+git add src/refresh src/worker.ts src/app.worker.module.ts tests/unit/refresh
 git commit -m "$(cat <<'EOF'
-feat: add scheduled refresh worker with bounded concurrency
+feat: add Nest refresh worker with bounded concurrency
 
 EOF
 )"
@@ -699,23 +609,18 @@ EOF
 ### Task 8: Health + staleness
 
 **Files:**
-- Create: `src/health/handler.ts`
-- Modify: `src/api.ts` (mount `GET /health`), resolvers freshness fields
-- Test: `tests/integration/health.test.ts`, unit test for `stale` computation
+- Create: `src/health/health.controller.ts` (`GET /health`)
+- Modify: resolver freshness fields if not already done in Task 6
+- Test: health + stale unit/integration tests
 
-**Interfaces:**
-- `stale = dataAgeSeconds > config.staleAfterSeconds`
-- Health JSON: `{ status: "ok" | "degraded", refresh: RefreshStatus }`
-- `degraded` when tracked locations &gt; 0 and last success older than stale threshold
-
-- [ ] **Step 1: Write failing tests for stale flag and health degraded**
+- [ ] **Step 1: Write failing tests**
 
 - [ ] **Step 2: Implement; PASS**
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add src/health src/api.ts src/graphql tests/integration/health.test.ts
+git add src/health src/graphql tests
 git commit -m "$(cat <<'EOF'
 feat: add health endpoint and response staleness flags
 
@@ -731,82 +636,17 @@ EOF
 - Create: `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`
 - Modify: `README.md`
 
-- [ ] **Step 1: Multi-stage Dockerfile**
+Dockerfile `CMD` → `node dist/main.js`; worker service command → `node dist/worker.js`.
 
-```dockerfile
-FROM node:22-alpine AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
-
-FROM node:22-alpine AS build
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY . .
-RUN npx prisma generate && npm run build
-
-FROM node:22-alpine AS runtime
-WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/package.json ./
-COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/docs/contracts/schema.graphql ./docs/contracts/schema.graphql
-USER node
-CMD ["node", "dist/api.js"]
-```
-
-- [ ] **Step 2: `docker-compose.yml` with `db`, `api`, `worker`**
-
-- [ ] **Step 3: `.github/workflows/ci.yml`**
-
-```yaml
-name: ci
-on:
-  push:
-    branches: [main]
-  pull_request:
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-```
-
-Integration tests that need Postgres: add a second job with `services.postgres` when those tests are gated behind `TEST_DATABASE_URL` — unit scoring tests must always run without DB.
-
-- [ ] **Step 4: Update README — run instructions, assumptions, link to docs, sample curl from `docs/contracts/README.md`, deliberate cuts**
-
-- [ ] **Step 5: Verify locally**
+- [ ] **Step 1–6:** Same as before (Compose `db` + `api` + `worker`, GHA lint/typecheck/test/build, README run + sample query from contracts)
 
 ```bash
-docker compose up --build -d
-curl -s http://localhost:4000/health
-# GraphQL query from docs/contracts/examples.graphql
-npm test
-```
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add Dockerfile docker-compose.yml .github/workflows/ci.yml README.md
 git commit -m "$(cat <<'EOF'
 chore: add Docker Compose, GitHub Actions CI, and run docs
 
 EOF
 )"
 ```
-
 ---
 
 ## Spec coverage matrix (self-review)

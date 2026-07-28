@@ -2,6 +2,8 @@
 
 This folder is the **machine-oriented source of truth** for how to consume the Weather Activity Ranking Service.
 
+Implemented by a **NestJS** GraphQL API (Apollo driver), schema-first from `schema.graphql`.
+
 The brief requires **GraphQL** (not REST). There is no OpenAPI/Swagger spec.
 
 ## Endpoints
