@@ -9,11 +9,19 @@ export class RefreshMetaRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async getRefreshMeta(): Promise<RefreshMetaRow> {
-    return this.prisma.refreshMeta.upsert({
+    const row = await this.prisma.refreshMeta.findUnique({
       where: { id: REFRESH_META_ID },
-      create: { id: REFRESH_META_ID },
-      update: {},
     });
+    if (row) {
+      return row;
+    }
+    // Read-only: do not upsert — /health probes must not write RefreshMeta.
+    return {
+      id: REFRESH_META_ID,
+      lastSuccessAt: null,
+      lastAttemptAt: null,
+      lastError: null,
+    };
   }
 
   async recordRefreshSuccess(): Promise<void> {

@@ -18,6 +18,22 @@ describe('RefreshMetaRepository', () => {
     await prisma.$disconnect();
   });
 
+  it('reads refresh meta without creating a row when none exists', async () => {
+    const before = await prisma.refreshMeta.count();
+    expect(before).toBe(0);
+
+    const meta = await repository.getRefreshMeta();
+    expect(meta).toEqual({
+      id: 1,
+      lastSuccessAt: null,
+      lastAttemptAt: null,
+      lastError: null,
+    });
+
+    const after = await prisma.refreshMeta.count();
+    expect(after).toBe(0);
+  });
+
   it('clears lastError when a failure is followed by success', async () => {
     await repository.recordRefreshFailure('provider down');
     let meta = await repository.getRefreshMeta();
