@@ -6,6 +6,18 @@ export type CircuitBreakerOptions = {
 
 type CircuitState = 'closed' | 'open' | 'half-open';
 
+export class CircuitOpenError extends Error {
+  readonly name = 'CircuitOpenError';
+
+  constructor(message = 'Circuit open') {
+    super(message);
+  }
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
 export class CircuitBreaker {
   private readonly failureThreshold: number;
   private readonly coolDownMs: number;
@@ -21,10 +33,14 @@ export class CircuitBreaker {
     this.now = opts.now ?? (() => Date.now());
   }
 
+  getState(): CircuitState {
+    return this.state;
+  }
+
   async exec<T>(fn: () => Promise<T>): Promise<T> {
     if (this.state === 'open') {
       if (this.now() - this.openedAt < this.coolDownMs) {
-        throw new Error('Circuit open');
+        throw new CircuitOpenError();
       }
       this.state = 'half-open';
     }
@@ -35,6 +51,10 @@ export class CircuitBreaker {
       this.state = 'closed';
       return result;
     } catch (err) {
+      // Caller cancellation must not count as a provider failure.
+      if (isAbortError(err)) {
+        throw err;
+      }
       this.consecutiveFailures += 1;
       if (
         this.state === 'half-open' ||

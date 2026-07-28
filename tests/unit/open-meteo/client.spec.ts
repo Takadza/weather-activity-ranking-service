@@ -19,7 +19,7 @@ describe('OpenMeteoClient', () => {
     temperature_2m_min: [2, 4],
     precipitation_sum: [1.5, 0],
     precipitation_probability_max: [40, 10],
-    wind_speed_10m_max: [5, 10], // m/s → km/h via × 3.6
+    wind_speed_10m_max: [5, 10], // m/s (wind_speed_unit=ms) → km/h via × 3.6
     snowfall_sum: [3, 0],
     weather_code: [71, 1],
   };
@@ -73,6 +73,34 @@ describe('OpenMeteoClient', () => {
     expect(days).toEqual(expected);
   });
 
+  it('requests forecast with pinned wind_speed_unit=ms and daily fields', async () => {
+    const fetchMock = jest.fn((url: string | URL) => {
+      const href = String(url);
+      if (href.includes('marine-api')) {
+        return Promise.resolve(jsonResponse({ daily: marineDaily }));
+      }
+      return Promise.resolve(jsonResponse({ daily: forecastDaily }));
+    });
+    const client = new OpenMeteoClient({
+      fetch: fetchMock as unknown as typeof fetch,
+      sleep: noopSleep,
+      circuitBreaker: new CircuitBreaker({ failureThreshold: 10 }),
+    });
+
+    await client.fetchForecast(48.85, 2.35);
+
+    const forecastCall = (
+      fetchMock.mock.calls as unknown as Array<[string | URL]>
+    ).find(([u]) => String(u).includes('/v1/forecast'));
+    expect(forecastCall).toBeDefined();
+    const params = new URL(String(forecastCall![0])).searchParams;
+    expect(params.get('wind_speed_unit')).toBe('ms');
+    expect(params.get('timezone')).toBe('UTC');
+    expect(params.get('forecast_days')).toBe('7');
+    expect(params.get('daily')).toContain('wind_speed_10m_max');
+    expect(params.get('daily')).toContain('precipitation_probability_max');
+  });
+
   it('retries transient 5xx then succeeds (3 attempts total)', async () => {
     let forecastCalls = 0;
     const fetchMock = jest.fn((url: string | URL) => {
@@ -99,6 +127,69 @@ describe('OpenMeteoClient', () => {
     expect(sleep).toHaveBeenCalledTimes(2);
   });
 
+  it('retries HTTP 429 with backoff', async () => {
+    let forecastCalls = 0;
+    const fetchMock = jest.fn((url: string | URL) => {
+      const href = String(url);
+      if (href.includes('marine-api')) {
+        return Promise.resolve(jsonResponse({ daily: marineDaily }));
+      }
+      forecastCalls += 1;
+      if (forecastCalls < 2) {
+        return Promise.resolve(jsonResponse({ error: true }, 429));
+      }
+      return Promise.resolve(jsonResponse({ daily: forecastDaily }));
+    });
+    const sleep = jest.fn(noopSleep);
+    const client = new OpenMeteoClient({
+      fetch: fetchMock as unknown as typeof fetch,
+      sleep,
+      circuitBreaker: new CircuitBreaker({ failureThreshold: 10 }),
+    });
+
+    await client.fetchForecast(1, 2);
+    expect(forecastCalls).toBe(2);
+    expect(sleep).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry non-429 4xx', async () => {
+    const fetchMock = jest.fn((url: string | URL) => {
+      const href = String(url);
+      if (href.includes('marine-api')) {
+        return Promise.resolve(jsonResponse({ daily: marineDaily }));
+      }
+      return Promise.resolve(jsonResponse({ error: true }, 400));
+    });
+    const sleep = jest.fn(noopSleep);
+    const client = new OpenMeteoClient({
+      fetch: fetchMock as unknown as typeof fetch,
+      sleep,
+      circuitBreaker: new CircuitBreaker({ failureThreshold: 10 }),
+    });
+
+    await expect(client.fetchForecast(1, 2)).rejects.toThrow(/HTTP 400/);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('opens circuit after consecutive forecast failures and fail-fasts', async () => {
+    const fetchMock = jest.fn(() =>
+      Promise.resolve(jsonResponse({ error: true }, 500)),
+    );
+    const client = new OpenMeteoClient({
+      fetch: fetchMock as unknown as typeof fetch,
+      sleep: noopSleep,
+      circuitBreaker: new CircuitBreaker({ failureThreshold: 3 }),
+      maxAttempts: 1,
+    });
+
+    for (let i = 0; i < 3; i++) {
+      await expect(client.fetchForecast(1, 2)).rejects.toThrow(/HTTP 500/);
+    }
+    const callsBefore = fetchMock.mock.calls.length;
+    await expect(client.fetchForecast(1, 2)).rejects.toThrow(/circuit/i);
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
+  });
+
   it('returns waveHeightM null when marine fails after retries', async () => {
     const fetchMock = jest.fn((url: string | URL) => {
       const href = String(url);
@@ -120,8 +211,6 @@ describe('OpenMeteoClient', () => {
   });
 
   it('does not trip shared circuit breaker on marine-only failures', async () => {
-    // Threshold 1: a single recorded marine failure must not open the shared
-    // breaker and block a later fetchForecast (weather still maps; waves null).
     const breaker = new CircuitBreaker({ failureThreshold: 1 });
     const fetchMock = jest.fn((url: string | URL) => {
       const href = String(url);
@@ -222,6 +311,29 @@ describe('OpenMeteoClient', () => {
       fetchMock.mock.calls as unknown as Array<[string | URL]>
     )[0][0];
     expect(String(firstUrl)).toContain('geocoding-api.open-meteo.com');
+  });
+
+  it('filters malformed geocode results', async () => {
+    const fetchMock = jest.fn(() =>
+      Promise.resolve(
+        jsonResponse({
+          results: [
+            { name: 'Ok', latitude: 1, longitude: 2 },
+            { name: 'Bad', latitude: 'x', longitude: 2 },
+            { latitude: 3, longitude: 4 },
+          ],
+        }),
+      ),
+    );
+    const client = new OpenMeteoClient({
+      fetch: fetchMock as unknown as typeof fetch,
+      sleep: noopSleep,
+      circuitBreaker: new CircuitBreaker({ failureThreshold: 10 }),
+    });
+    const results = await client.geocode('x');
+    expect(results).toEqual([
+      { name: 'Ok', country: null, admin1: null, latitude: 1, longitude: 2 },
+    ]);
   });
 
   it('accepts weathercode alias from forecast daily', async () => {

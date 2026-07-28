@@ -17,7 +17,20 @@ export type OpenMeteoClientOptions = {
   marineBaseUrl?: string;
   geocodeBaseUrl?: string;
   maxAttempts?: number;
+  /** Per-request timeout; combined with any caller AbortSignal. */
+  timeoutMs?: number;
 };
+
+export class HttpError extends Error {
+  readonly name = 'HttpError';
+
+  constructor(
+    readonly status: number,
+    message?: string,
+  ) {
+    super(message ?? `HTTP ${status}`);
+  }
+}
 
 const FORECAST_DAILY_PARAMS = [
   'temperature_2m_max',
@@ -34,20 +47,37 @@ function defaultSleep(ms: number): Promise<void> {
 }
 
 function isTransientError(err: unknown): boolean {
+  if (err instanceof HttpError) {
+    return err.status >= 500 || err.status === 429;
+  }
   if (err instanceof Error && /HTTP 5\d\d/.test(err.message)) {
     return true;
   }
-  // Network / fetch failures
-  return (
-    err instanceof TypeError ||
-    (err instanceof Error && err.name === 'FetchError')
-  );
+  // Network / fetch failures (not caller abort)
+  if (err instanceof Error && err.name === 'AbortError') {
+    return false;
+  }
+  return err instanceof TypeError;
 }
 
 function at<T>(arr: Array<T | null> | undefined, i: number): T | null {
   if (!arr || i >= arr.length) return null;
   const v = arr[i];
   return v === undefined ? null : v;
+}
+
+function combineSignals(
+  timeoutMs: number | undefined,
+  signal?: AbortSignal,
+): AbortSignal | undefined {
+  const signals: AbortSignal[] = [];
+  if (signal) signals.push(signal);
+  if (timeoutMs != null && timeoutMs > 0) {
+    signals.push(AbortSignal.timeout(timeoutMs));
+  }
+  if (signals.length === 0) return undefined;
+  if (signals.length === 1) return signals[0];
+  return AbortSignal.any(signals);
 }
 
 export class OpenMeteoClient {
@@ -58,6 +88,7 @@ export class OpenMeteoClient {
   private readonly marineBaseUrl: string;
   private readonly geocodeBaseUrl: string;
   private readonly maxAttempts: number;
+  private readonly timeoutMs: number | undefined;
 
   constructor(opts: OpenMeteoClientOptions = {}) {
     this.fetchImpl = opts.fetch ?? fetch.bind(globalThis);
@@ -70,6 +101,7 @@ export class OpenMeteoClient {
     this.geocodeBaseUrl =
       opts.geocodeBaseUrl ?? 'https://geocoding-api.open-meteo.com/v1/search';
     this.maxAttempts = opts.maxAttempts ?? 3;
+    this.timeoutMs = opts.timeoutMs;
   }
 
   async fetchForecast(
@@ -81,6 +113,9 @@ export class OpenMeteoClient {
     forecastUrl.searchParams.set('latitude', String(lat));
     forecastUrl.searchParams.set('longitude', String(lon));
     forecastUrl.searchParams.set('daily', FORECAST_DAILY_PARAMS);
+    // Pin m/s so ×3.6 → km/h is correct (API default is kmh — see docs/03 §6).
+    forecastUrl.searchParams.set('wind_speed_unit', 'ms');
+    // UTC day buckets; locked here for deterministic storage keys (docs/03 §6).
     forecastUrl.searchParams.set('timezone', 'UTC');
     forecastUrl.searchParams.set('forecast_days', '7');
 
@@ -91,10 +126,12 @@ export class OpenMeteoClient {
     marineUrl.searchParams.set('timezone', 'UTC');
     marineUrl.searchParams.set('forecast_days', '7');
 
+    const signal = combineSignals(this.timeoutMs, opts?.signal);
+
     const forecast = await this.circuitBreaker.exec(() =>
       this.fetchJsonWithRetry<OpenMeteoForecastResponse>(
         forecastUrl.toString(),
-        opts?.signal,
+        signal,
       ),
     );
 
@@ -103,7 +140,7 @@ export class OpenMeteoClient {
     try {
       marine = await this.fetchJsonWithRetry<OpenMeteoMarineResponse>(
         marineUrl.toString(),
-        opts?.signal,
+        signal,
       );
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -116,15 +153,20 @@ export class OpenMeteoClient {
     return this.mapForecastDays(forecast, marine);
   }
 
-  async geocode(name: string): Promise<GeocodeResult[]> {
+  async geocode(
+    name: string,
+    opts?: { signal?: AbortSignal },
+  ): Promise<GeocodeResult[]> {
     const url = new URL(this.geocodeBaseUrl);
     url.searchParams.set('name', name);
     url.searchParams.set('count', '10');
     url.searchParams.set('language', 'en');
     url.searchParams.set('format', 'json');
 
+    const signal = combineSignals(this.timeoutMs, opts?.signal);
+
     const body = await this.circuitBreaker.exec(() =>
-      this.fetchJsonWithRetry<OpenMeteoGeocodeResponse>(url.toString()),
+      this.fetchJsonWithRetry<OpenMeteoGeocodeResponse>(url.toString(), signal),
     );
 
     return (body.results ?? [])
@@ -172,7 +214,7 @@ export class OpenMeteoClient {
 
     return daily.time.map((date, i) => {
       const windMs = at(daily.wind_speed_10m_max, i);
-      // Open-Meteo default wind unit is m/s; convert to km/h for WeatherDay.windMaxKmh.
+      // Requested wind_speed_unit=ms; convert to km/h for WeatherDay.windMaxKmh.
       const windMaxKmh = windMs === null ? null : windMs * 3.6;
 
       return {
@@ -183,9 +225,7 @@ export class OpenMeteoClient {
         precipProbPct: at(daily.precipitation_probability_max, i),
         windMaxKmh,
         snowfallCm: at(daily.snowfall_sum, i),
-        waveHeightM: waveByDate.has(date)
-          ? (waveByDate.get(date) ?? null)
-          : null,
+        waveHeightM: waveByDate.get(date) ?? null,
         weatherCode: at(weatherCodes, i),
       };
     });
@@ -200,12 +240,7 @@ export class OpenMeteoClient {
       try {
         const res = await this.fetchImpl(url, { signal });
         if (!res.ok) {
-          const err = new Error(`HTTP ${res.status}`);
-          if (res.status >= 500 && res.status <= 599) {
-            throw err;
-          }
-          // Non-retryable client / other errors
-          throw err;
+          throw new HttpError(res.status);
         }
         return (await res.json()) as T;
       } catch (err) {
