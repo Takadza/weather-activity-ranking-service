@@ -16,10 +16,10 @@ Follow the stages in order. Each step links to the next.
 | **1. Clarify** | Done | [docs/01-requirements-and-estimation.md](docs/01-requirements-and-estimation.md) |
 | **2. Design** | Done | [docs/02-system-design.md](docs/02-system-design.md) → see Design packet below |
 | **3. TDD plan** | Done | [docs/superpowers/plans/2026-07-28-weather-activity-ranking.md](docs/superpowers/plans/2026-07-28-weather-activity-ranking.md) |
-| **4. Code** | In progress | Tasks 1–3 done (scaffold, scoring, Postgres/Prisma store); continue TDD plan |
-| **5. Review** | Not started | README runbook + deliberate cuts (after Code) |
+| **4. Code** | Done | TDD plan Tasks 1–9 complete (app, worker, Compose, CI) |
+| **5. Review** | Next | Deliberate-cuts polish / submission readiness |
 
-**Current stage:** Code in progress (through Task 3).
+**Current stage:** Code complete → Review.
 
 Full doc index (same flow): [docs/README.md](docs/README.md)
 
@@ -38,26 +38,57 @@ Read in this order:
 
 ---
 
-## TDD plan (stage 3)
+## How to run
 
-Bite-sized red → green implementation plan:
+### Prerequisites
 
-**[docs/superpowers/plans/2026-07-28-weather-activity-ranking.md](docs/superpowers/plans/2026-07-28-weather-activity-ranking.md)**
+- Node.js 22+
+- Docker / Docker Compose
+- Copy `.env.example` → `.env` for local non-Compose runs
 
-Order: scaffold → scoring → **early CI** → **Postgres Compose + Prisma + integration CI** → Open-Meteo → geocoding → GraphQL → worker → health → full Docker/README.
+### Unit tests (no Docker / Postgres)
 
-See the plan’s **Testing & CI/CD timing** section.
+```bash
+npm ci
+npm test
+```
+
+### Integration tests (Postgres via Compose)
+
+```bash
+docker compose up -d db
+npm run test:integration
+```
+
+### Full local stack (db + api + worker)
+
+```bash
+docker compose up --build -d
+curl -s http://localhost:3000/health
+```
+
+- **API:** GraphQL at `http://localhost:3000/graphql`, health at `http://localhost:3000/health`
+- **Worker:** same image; refresh loop against Postgres
+- On start, `api` runs `prisma migrate deploy` then listens on port 3000
+
+Stop with `docker compose down`.
 
 ---
 
-## How to consume the API (after Code)
+## Sample GraphQL query
+
+```bash
+curl -s http://localhost:3000/graphql \
+  -H 'content-type: application/json' \
+  -d '{"query":"query($location: LocationInput!){ activityRanking(location:$location){ location{name} stale rankings{activity overallScore rank} } }","variables":{"location":{"name":"Cape Town"}}}'
+```
+
+More operations: [docs/contracts/examples.graphql](docs/contracts/examples.graphql) · contract overview: [docs/contracts/README.md](docs/contracts/README.md)
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/graphql` | `POST` | Activity rankings |
 | `/health` | `GET` | Liveness + refresh status |
-
-Details and copy-paste queries: [docs/contracts/README.md](docs/contracts/README.md)
 
 ---
 
@@ -68,4 +99,30 @@ Details and copy-paste queries: [docs/contracts/README.md](docs/contracts/README
 - Default refresh every 6 hours; responses expose `lastUpdated` / `dataAgeSeconds` / `stale`  
 - Warm path reads Postgres only; cold-start may call Open-Meteo within a timeout  
 
-More: [docs/01](docs/01-requirements-and-estimation.md) §2 and [docs/04](docs/04-operations-and-failure-modes.md) deliberate cuts.
+More: [docs/01](docs/01-requirements-and-estimation.md) §2 and [docs/04](docs/04-operations-and-failure-modes.md).
+
+---
+
+## Deliberate cuts
+
+From [docs/04 §6](docs/04-operations-and-failure-modes.md) — focused submission beats exhaustive:
+
+| Cut | Why |
+|---|---|
+| No auth / multi-tenant | Out of brief |
+| No forecast history | No FR; storage explosion |
+| No microservices | ADR-001 |
+| No serverless | ADR-002 |
+| No CDN / multi-region / WAF | Backend GraphQL; YAGNI |
+| No Redis in v1 | In-process cache sufficient initially |
+| No message queue in v1 | One worker + concurrency config |
+| No admin UI for locations | Out of brief |
+| No “is there a ski resort?” | Weather-only scope |
+| Cloud LB not provisioned | Design for it; ship one replica |
+| Full CD to production cloud | Optional; CI is the mandatory shape |
+
+---
+
+## TDD plan (stage 3)
+
+**[docs/superpowers/plans/2026-07-28-weather-activity-ranking.md](docs/superpowers/plans/2026-07-28-weather-activity-ranking.md)** — Code stage (Tasks 1–9) complete. Next: Review.

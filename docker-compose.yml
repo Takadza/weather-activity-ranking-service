@@ -15,5 +15,32 @@ services:
     volumes:
       - wars_pg:/var/lib/postgresql/data
 
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment: &app_env
+      DATABASE_URL: postgresql://wars:wars@db:5432/wars?schema=public
+      PORT: "3000"
+      REFRESH_INTERVAL_MS: "21600000"
+      REFRESH_CONCURRENCY: "5"
+      OPEN_METEO_TIMEOUT_MS: "5000"
+      COLD_START_TIMEOUT_MS: "3000"
+      STALE_AFTER_SECONDS: "21600"
+      LOG_LEVEL: info
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+
+  worker:
+    build: .
+    environment:
+      <<: *app_env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["node", "dist/worker.js"]
+
 volumes:
   wars_pg:
