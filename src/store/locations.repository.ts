@@ -33,4 +33,8 @@ export class LocationsRepository {
       orderBy: { id: 'asc' },
     });
   }
+
+  async countTrackedLocations(): Promise<number> {
+    return this.prisma.location.count();
+  }
 }
