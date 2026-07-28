@@ -76,13 +76,12 @@ describe('ForecastsRepository', () => {
     expect(await repository.getForecastDays(locationId)).toEqual([replacement]);
   });
 
-  it('clears the forecast window when given no days', async () => {
-    await repository.upsertForecastDays(locationId, [
-      weatherDay('2026-07-29', 10),
-    ]);
+  it('leaves existing forecasts unchanged when given no days', async () => {
+    const existing = weatherDay('2026-07-29', 10);
+    await repository.upsertForecastDays(locationId, [existing]);
 
     await repository.upsertForecastDays(locationId, []);
 
-    expect(await repository.getForecastDays(locationId)).toEqual([]);
+    expect(await repository.getForecastDays(locationId)).toEqual([existing]);
   });
 });

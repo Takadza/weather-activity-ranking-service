@@ -10,6 +10,13 @@ export class ForecastsRepository {
     locationId: string,
     days: WeatherDay[],
   ): Promise<void> {
+    // Empty payload is a no-op so a bad/empty provider response cannot wipe
+    // last-known-good forecasts (stale-over-empty). Use an explicit clear API
+    // if wipe semantics are ever required.
+    if (days.length === 0) {
+      return;
+    }
+
     const fetchedAt = new Date();
     const forecastDates = days.map(
       (day) => new Date(`${day.date}T00:00:00.000Z`),
@@ -17,43 +24,38 @@ export class ForecastsRepository {
 
     await this.prisma.$transaction(async (transaction) => {
       await transaction.forecastDay.deleteMany({
-        where:
-          forecastDates.length === 0
-            ? { locationId }
-            : {
-                locationId,
-                forecastDate: { notIn: forecastDates },
-              },
+        where: {
+          locationId,
+          forecastDate: { notIn: forecastDates },
+        },
       });
 
-      await Promise.all(
-        days.map((day, index) => {
-          const forecastDate = forecastDates[index];
-          const values = {
-            tempMaxC: day.tempMaxC,
-            tempMinC: day.tempMinC,
-            precipMm: day.precipMm,
-            precipProbPct: day.precipProbPct,
-            windMaxKmh: day.windMaxKmh,
-            snowfallCm: day.snowfallCm,
-            waveHeightM: day.waveHeightM,
-            weatherCode: day.weatherCode,
-            fetchedAt,
-          };
+      for (const [index, day] of days.entries()) {
+        const forecastDate = forecastDates[index];
+        const values = {
+          tempMaxC: day.tempMaxC,
+          tempMinC: day.tempMinC,
+          precipMm: day.precipMm,
+          precipProbPct: day.precipProbPct,
+          windMaxKmh: day.windMaxKmh,
+          snowfallCm: day.snowfallCm,
+          waveHeightM: day.waveHeightM,
+          weatherCode: day.weatherCode,
+          fetchedAt,
+        };
 
-          return transaction.forecastDay.upsert({
-            where: {
-              locationId_forecastDate: { locationId, forecastDate },
-            },
-            create: {
-              locationId,
-              forecastDate,
-              ...values,
-            },
-            update: values,
-          });
-        }),
-      );
+        await transaction.forecastDay.upsert({
+          where: {
+            locationId_forecastDate: { locationId, forecastDate },
+          },
+          create: {
+            locationId,
+            forecastDate,
+            ...values,
+          },
+          update: values,
+        });
+      }
     });
   }
 
