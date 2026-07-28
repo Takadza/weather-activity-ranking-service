@@ -148,19 +148,16 @@ describe('HealthService.getHealth', () => {
     });
   });
 
-  it('returns ok when tracked with recent success but lastError attempt is beyond threshold', async () => {
+  it('returns ok when success age equals staleAfterSeconds', async () => {
     const now = new Date('2026-07-29T12:00:00.000Z');
-    const lastSuccessAt = new Date(now.getTime() - 60 * 1000);
-    const lastAttemptAt = new Date(
-      now.getTime() - (STALE_AFTER + 100) * 1000,
-    );
+    const lastSuccessAt = new Date(now.getTime() - STALE_AFTER * 1000);
     const { service } = makeService({
       trackedLocationCount: 1,
       now,
       refreshMeta: meta({
         lastSuccessAt,
-        lastAttemptAt,
-        lastError: 'old failure',
+        lastAttemptAt: lastSuccessAt,
+        lastError: null,
       }),
     });
 
