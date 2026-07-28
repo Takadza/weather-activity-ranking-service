@@ -10,18 +10,18 @@
   },
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"tests/**/*.ts\"",
     "start": "node dist/main",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:worker": "node dist/worker",
     "start:worker:dev": "nest start --watch --entryFile worker",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest --testPathIgnorePatterns=integration",
-    "test:watch": "jest --watch --testPathIgnorePatterns=integration",
-    "test:cov": "jest --coverage --testPathIgnorePatterns=integration",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand --testPathIgnorePatterns=integration",
+    "lint": "eslint \"{src,apps,libs,test,tests}/**/*.ts\" --fix",
+    "test": "jest --testPathIgnorePatterns=/tests/integration/",
+    "test:watch": "jest --watch --testPathIgnorePatterns=/tests/integration/",
+    "test:cov": "jest --coverage --testPathIgnorePatterns=/tests/integration/",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand --testPathIgnorePatterns=/tests/integration/",
     "test:integration": "jest --config ./test/jest-integration.json --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json"
   },
@@ -79,7 +79,7 @@
       "/node_modules/",
       "/dist/",
       "/.worktrees/",
-      "integration"
+      "/tests/integration/"
     ],
     "modulePathIgnorePatterns": [
       "<rootDir>/.worktrees/"

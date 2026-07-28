@@ -4,6 +4,7 @@ import {
   ActivityRanking,
   ActivityType,
   DayScore,
+  ReasonCode,
   WeatherDay,
   clamp,
 } from './types';
@@ -21,7 +22,7 @@ function scoreSkiing(day: WeatherDay): DayScore {
   }
 
   let score = 20;
-  const reasonCodes: string[] = [];
+  const reasonCodes: ReasonCode[] = [];
   const tempMaxC = day.tempMaxC;
 
   if (tempMaxC >= -15 && tempMaxC <= 5) {
@@ -68,7 +69,7 @@ function scoreSurfing(day: WeatherDay): DayScore {
   }
 
   const waveHeightM = day.waveHeightM;
-  const reasonCodes: string[] = [];
+  const reasonCodes: ReasonCode[] = [];
   let score: number;
 
   if (waveHeightM >= 0.5 && waveHeightM <= 2.5) {
@@ -110,7 +111,7 @@ function scoreOutdoor(day: WeatherDay): DayScore {
   }
 
   let score = 35;
-  const reasonCodes: string[] = [];
+  const reasonCodes: ReasonCode[] = [];
   const tempMaxC = day.tempMaxC;
 
   if (tempMaxC >= 10 && tempMaxC <= 28) {
@@ -164,7 +165,6 @@ function scoreIndoor(day: WeatherDay): DayScore {
   }
 
   let score = 50;
-  const reasonCodes: string[] = [];
   const tempMaxC = day.tempMaxC;
 
   if (tempMaxC < 10 || tempMaxC > 28) {
@@ -194,7 +194,7 @@ function scoreIndoor(day: WeatherDay): DayScore {
     date: day.date,
     available: true,
     score: clamp(score),
-    reasonCodes,
+    reasonCodes: [],
   };
 }
 
@@ -221,8 +221,7 @@ export function scoreAll(days: WeatherDay[]): ActivityRanking[] {
       const overallScore =
         availableScores.length === 0
           ? null
-          : availableScores.reduce((a, b) => a + b, 0) /
-            availableScores.length;
+          : availableScores.reduce((a, b) => a + b, 0) / availableScores.length;
 
       return {
         activity,
@@ -260,13 +259,16 @@ export function scoreAll(days: WeatherDay[]): ActivityRanking[] {
   }));
 }
 
+const scoreDayPure = scoreDay;
+const scoreAllPure = scoreAll;
+
 @Injectable()
 export class ScoringService {
   scoreDay(activity: ActivityType, day: WeatherDay): DayScore {
-    return scoreDay(activity, day);
+    return scoreDayPure(activity, day);
   }
 
   scoreAll(days: WeatherDay[]): ActivityRanking[] {
-    return scoreAll(days);
+    return scoreAllPure(days);
   }
 }

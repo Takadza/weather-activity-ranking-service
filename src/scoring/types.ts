@@ -1,8 +1,5 @@
 export type ActivityType =
-  | 'SKIING'
-  | 'SURFING'
-  | 'OUTDOOR_SIGHTSEEING'
-  | 'INDOOR_SIGHTSEEING';
+  'SKIING' | 'SURFING' | 'OUTDOOR_SIGHTSEEING' | 'INDOOR_SIGHTSEEING';
 
 export const ACTIVITY_TYPES: readonly ActivityType[] = [
   'SKIING',
@@ -10,6 +7,19 @@ export const ACTIVITY_TYPES: readonly ActivityType[] = [
   'OUTDOOR_SIGHTSEEING',
   'INDOOR_SIGHTSEEING',
 ] as const;
+
+export type ReasonCode =
+  | 'MISSING_TEMP'
+  | 'TOO_WARM'
+  | 'TOO_COLD'
+  | 'NO_SNOW'
+  | 'HIGH_WIND'
+  | 'NO_MARINE_DATA'
+  | 'FLAT'
+  | 'TOO_BIG'
+  | 'TOO_HOT'
+  | 'HEAVY_RAIN'
+  | 'BAD_WEATHER';
 
 export type WeatherDay = {
   date: string;
@@ -27,7 +37,7 @@ export type DayScore = {
   date: string;
   score: number | null;
   available: boolean;
-  reasonCodes: string[];
+  reasonCodes: ReasonCode[];
 };
 
 export type ActivityRanking = {

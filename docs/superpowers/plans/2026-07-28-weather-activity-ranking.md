@@ -79,6 +79,35 @@ tests/
 ```
 
 **Nest note:** Keep scoring logic framework-agnostic inside `ScoringService` methods so unit tests can `new ScoringService()` or test the pure functions without a full Nest testing module. Use `@nestjs/testing` for resolvers/integration.
+
+## Testing & CI/CD timing (do not defer everything to the end)
+
+Test as we develop. Split “early gate” from “full delivery”:
+
+| When | Deliverable | Purpose |
+|---|---|---|
+| **Task 2** | Unit tests (Jest) for scoring | No DB/Docker required |
+| **Task 2b (new)** | Minimal GitHub Actions CI | Every push: lint → typecheck → unit tests → build |
+| **Task 3** | `docker-compose.yml` with **Postgres only** + integration tests | Real DB for store upserts locally and (soon) in CI |
+| **Task 3 (same)** | Extend CI with optional `integration` job + Postgres service | Integration tests gated on `DATABASE_URL` / `npm run test:integration` |
+| **Tasks 4–8** | More unit + integration tests | CI keeps running; Compose `db` stays up for local work |
+| **Task 9** | Multi-stage **Dockerfile**, Compose `api` + `worker`, README runbook | Full local prod-like stack; CI may `docker build` |
+
+**Rules:**
+
+- Unit tests **never** require Docker or Postgres (especially `ScoringService`)
+- Integration tests **require** Postgres via Compose (local) or GHA service container (CI)
+- Do **not** wait until Task 9 to have CI or a database — that blocks early feedback
+
+**Day-to-day local commands:**
+
+```bash
+npm test                          # unit (always)
+docker compose up -d db           # from Task 3 onward
+npm run test:integration          # store / GraphQL integration
+npm run start:dev                 # API when GraphQL exists
+```
+
 ---
 
 ### Task 1: NestJS project scaffold
@@ -136,7 +165,7 @@ EOF
 
 **Files:**
 - Create: `src/scoring/types.ts`, `src/scoring/scoring.service.ts`, `src/scoring/scoring.module.ts`
-- Test: `tests/unit/scoring/rubric.test.ts`, `tests/unit/scoring/rank.test.ts`
+- Test: `src/scoring/rubric.spec.ts`, `src/scoring/rank.spec.ts` (Jest colocated `*.spec.ts`; Nest scaffold default — also allowed under `tests/unit/**/*.spec.ts` after Task 2b)
 
 **Interfaces:**
 - Produces: `ScoringService.scoreDay(...)`, `ScoringService.scoreAll(...)`, `RUBRIC_VERSION` — pure logic, no Nest/Prisma inside the algorithms
@@ -145,9 +174,8 @@ EOF
 - [ ] **Step 1: Write failing skiing / surfing tests**
 
 ```ts
-// tests/unit/scoring/rubric.test.ts
-import { describe, expect, it } from "vitest";
-import { scoreDay } from "../../../src/scoring/index.js";
+// src/scoring/rubric.spec.ts
+import { scoreDay } from "./scoring.service";
 
 const base = {
   date: "2026-07-28",
@@ -206,7 +234,7 @@ describe("scoreDay surfing", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `npm test -- tests/unit/scoring/rubric.test.ts`  
+Run: `npm test -- rubric.spec.ts`  
 Expected: FAIL (module not found / scoreDay not defined)
 
 - [ ] **Step 3: Implement types + skiing/surfing scorers**
@@ -246,11 +274,24 @@ export type WeatherDay = {
   weatherCode: number | null;
 };
 
+export type ReasonCode =
+  | "MISSING_TEMP"
+  | "TOO_WARM"
+  | "TOO_COLD"
+  | "NO_SNOW"
+  | "HIGH_WIND"
+  | "NO_MARINE_DATA"
+  | "FLAT"
+  | "TOO_BIG"
+  | "TOO_HOT"
+  | "HEAVY_RAIN"
+  | "BAD_WEATHER";
+
 export type DayScore = {
   date: string;
   score: number | null;
   available: boolean;
-  reasonCodes: string[];
+  reasonCodes: ReasonCode[];
 };
 
 export const RUBRIC_VERSION = "2026-07-28.1";
@@ -262,15 +303,14 @@ export function clamp(n: number): number {
 
 - [ ] **Step 4: Run skiing/surfing tests — expect PASS**
 
-Run: `npm test -- tests/unit/scoring/rubric.test.ts`  
+Run: `npm test -- rubric.spec.ts`  
 Expected: PASS for skiing/surfing cases (add outdoor/indoor next)
 
 - [ ] **Step 5: Write outdoor/indoor + rank tests**
 
 ```ts
-// tests/unit/scoring/rank.test.ts
-import { describe, expect, it } from "vitest";
-import { scoreAll } from "../../../src/scoring/index.js";
+// src/scoring/rank.spec.ts
+import { scoreAll } from "./scoring.service";
 
 describe("scoreAll ranking", () => {
   it("ranks outdoor above indoor on a mild clear day", () => {
@@ -321,13 +361,13 @@ describe("scoreAll ranking", () => {
 
 - [ ] **Step 6: Implement outdoor/indoor + `scoreAll`; all scoring tests PASS**
 
-Run: `npm test -- tests/unit/scoring`  
+Run: `npm test -- scoring`  
 Expected: all PASS
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add src/scoring tests/unit/scoring
+git add src/scoring
 git commit -m "$(cat <<'EOF'
 feat: add deterministic activity scoring rubric with unit tests
 
@@ -337,105 +377,183 @@ EOF
 
 ---
 
-### Task 3: Prisma schema + store upserts
+### Task 2b: Early CI (unit gate) + test script split
+
+**Why now:** Catch regressions on every push before Prisma/Docker complexity. Full app image stays Task 9.
 
 **Files:**
+- Create: `.github/workflows/ci.yml`
+- Modify: `package.json` (ensure `test` = unit only; add `test:integration` placeholder or script that runs `test/integration` / `tests/integration` with a clear pattern)
+- Modify: Jest config so unit specs live under `src/**/*.spec.ts` and/or `tests/unit/**/*.spec.ts`; integration under `tests/integration/**/*.spec.ts` and are **excluded** from default `npm test`
+
+**Interfaces:**
+- Produces: green CI on PR/push for lint + typecheck + unit tests + build
+- Produces: `npm run test:integration` (may no-op or skip until Task 3 adds tests)
+
+- [ ] **Step 1: Split unit vs integration in package.json / Jest**
+
+```json
+"test": "jest --testPathIgnorePatterns=integration",
+"test:integration": "jest --config ./test/jest-integration.json --runInBand"
+```
+
+(Or equivalent: `testRegex` / project config. Unit must not need `DATABASE_URL`.)
+
+- [ ] **Step 2: Add `.github/workflows/ci.yml`**
+
+```yaml
+name: ci
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+```
+
+- [ ] **Step 3: Push and confirm the workflow runs**
+
+Expected: CI green with Task 2 scoring tests (once Task 2 is merged).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github/workflows/ci.yml package.json test/
+git commit -m "$(cat <<'EOF'
+ci: add early GitHub Actions unit gate
+
+EOF
+)"
+```
+
+---
+
+### Task 3: Postgres Compose + Prisma schema + store upserts
+
+**Files:**
+- Create: `docker-compose.yml` (**`db` service only** for now)
 - Create: `prisma/schema.prisma` (from `docs/contracts/prisma-schema.md`)
-- Create: `src/store/prisma.ts`, `src/store/locations.ts`, `src/store/forecasts.ts`, `src/store/geocode-cache.ts`, `src/store/refresh-meta.ts`
-- Test: `tests/integration/store.forecasts.test.ts`
+- Create: Nest store module — `src/store/store.module.ts`, `prisma.service.ts`, repositories (`locations`, `forecasts`, `geocode-cache`, `refresh-meta`)
+- Create: `test/jest-integration.json` (if not in 2b)
+- Test: `tests/integration/store.forecasts.spec.ts`
+- Modify: `.github/workflows/ci.yml` — add `integration` job with Postgres service
 
 **Interfaces:**
 - Produces:
-  - `upsertForecastDays(locationId: string, days: Omit<ForecastDayCreate, "id">[]): Promise<void>` — idempotent on `(locationId, forecastDate)`
-  - `getForecastDays(locationId: string): Promise<WeatherDay[]>` mapped from DB
+  - `upsertForecastDays(locationId: string, days: ...): Promise<void>` — idempotent on `(locationId, forecastDate)`
+  - `getForecastDays(locationId: string): Promise<WeatherDay[]>`
   - `findOrCreateLocation(...)`, `upsertGeocodeCache(...)`, `getRefreshMeta()`, `recordRefreshSuccess()`, `recordRefreshFailure(error: string)`
+  - Local: `docker compose up -d db`
 
-- [ ] **Step 1: Copy Prisma schema and migrate**
+- [ ] **Step 1: Add Compose Postgres**
+
+```yaml
+# docker-compose.yml
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wars
+      POSTGRES_PASSWORD: wars
+      POSTGRES_DB: wars
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wars -d wars"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - wars_pg:/var/lib/postgresql/data
+
+volumes:
+  wars_pg:
+```
+
+```bash
+docker compose up -d db
+# wait until healthy
+export DATABASE_URL=postgresql://wars:wars@localhost:5432/wars?schema=public
+```
+
+- [ ] **Step 2: Copy Prisma schema and migrate**
 
 Copy exact models from `docs/contracts/prisma-schema.md` into `prisma/schema.prisma`.
 
-Run (Postgres via Compose or local):
+```bash
+npx prisma migrate dev --name init
+npx prisma generate
+```
+
+- [ ] **Step 3: Write failing upsert idempotency integration test**
+
+```ts
+// tests/integration/store.forecasts.spec.ts
+import { describe, expect, it, beforeAll, afterAll } from "@jest/globals";
+// Use Nest TestingModule or PrismaService directly — same behaviour as plan:
+// upsert twice same location+date → one row; second write wins on tempMaxC
+```
+
+(Keep the behavioural assertions from the previous Task 3 draft: one row after two upserts, `tempMaxC === 11`.)
+
+- [ ] **Step 4: Implement store module; integration test PASS locally**
 
 ```bash
-docker run -d --name wars-pg -e POSTGRES_USER=wars -e POSTGRES_PASSWORD=wars -e POSTGRES_DB=wars -p 5432:5432 postgres:16-alpine
-export DATABASE_URL=postgresql://wars:wars@localhost:5432/wars?schema=public
-npx prisma migrate dev --name init
+docker compose up -d db
+DATABASE_URL=postgresql://wars:wars@localhost:5432/wars?schema=public npm run test:integration
 ```
 
-- [ ] **Step 2: Write failing upsert idempotency test**
+- [ ] **Step 5: Extend CI with integration job**
 
-```ts
-// tests/integration/store.forecasts.test.ts
-import { describe, expect, it, beforeAll, afterAll } from "vitest";
-import { prisma } from "../../src/store/prisma.js";
-import { findOrCreateLocation, upsertForecastDays, getForecastDays } from "../../src/store/forecasts.js";
-
-describe("forecast upserts", () => {
-  beforeAll(async () => {
-    await prisma.forecastDay.deleteMany();
-    await prisma.location.deleteMany();
-  });
-  afterAll(async () => {
-    await prisma.$disconnect();
-  });
-
-  it("upserts same location+date twice without duplicating", async () => {
-    const loc = await findOrCreateLocation({
-      name: "Testville",
-      country: "ZZ",
-      admin1: null,
-      latitude: 1.23,
-      longitude: 4.56,
-    });
-    const day = {
-      forecastDate: new Date("2026-07-28"),
-      tempMaxC: 10,
-      tempMinC: 2,
-      precipMm: 0,
-      precipProbPct: 0,
-      windMaxKmh: 5,
-      snowfallCm: 0,
-      waveHeightM: null,
-      weatherCode: 0,
-      rawJson: null,
-      fetchedAt: new Date(),
-    };
-    await upsertForecastDays(loc.id, [day]);
-    await upsertForecastDays(loc.id, [{ ...day, tempMaxC: 11 }]);
-    const rows = await prisma.forecastDay.findMany({ where: { locationId: loc.id } });
-    expect(rows).toHaveLength(1);
-    expect(rows[0].tempMaxC).toBe(11);
-    const weather = await getForecastDays(loc.id);
-    expect(weather[0].tempMaxC).toBe(11);
-  });
-});
+```yaml
+  integration:
+    runs-on: ubuntu-latest
+    needs: unit
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: wars
+          POSTGRES_PASSWORD: wars
+          POSTGRES_DB: wars
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U wars -d wars"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://wars:wars@localhost:5432/wars?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx prisma migrate deploy
+      - run: npm run test:integration
 ```
-
-Put `findOrCreateLocation` / `upsertForecastDays` / `getForecastDays` in `src/store/forecasts.ts` and `src/store/locations.ts` as needed — keep exports stable as listed in Interfaces.
-
-- [ ] **Step 3: Run test — expect FAIL**
-
-Run: `npm test -- tests/integration/store.forecasts.test.ts`  
-Expected: FAIL until store implemented
-
-- [ ] **Step 4: Implement Prisma client + upsert with `upsert` / `createMany`+update**
-
-```ts
-// src/store/prisma.ts
-import { PrismaClient } from "@prisma/client";
-export const prisma = new PrismaClient();
-```
-
-Use `prisma.forecastDay.upsert({ where: { locationId_forecastDate: { locationId, forecastDate } }, create: {...}, update: {...} })`.
-
-- [ ] **Step 5: Run integration test — PASS**
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add prisma src/store tests/integration
+git add docker-compose.yml prisma src/store tests/integration .github/workflows/ci.yml
 git commit -m "$(cat <<'EOF'
-feat: add Prisma models and idempotent forecast upserts
+feat: add Postgres Compose, Prisma store upserts, and integration CI
 
 EOF
 )"
@@ -630,23 +748,72 @@ EOF
 
 ---
 
-### Task 9: Docker Compose + GitHub Actions + README
+### Task 9: App Docker image + Compose api/worker + README
+
+**Prerequisite:** Task 2b CI and Task 3 `db` Compose already exist — do **not** recreate them from scratch.
 
 **Files:**
-- Create: `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml`
-- Modify: `README.md`
+- Create: `Dockerfile` (multi-stage Nest build)
+- Modify: `docker-compose.yml` — add `api` + `worker` services (keep `db`)
+- Modify: `.github/workflows/ci.yml` — optional `docker build` job
+- Modify: `README.md` — run instructions, sample GraphQL curl from `docs/contracts`
 
-Dockerfile `CMD` → `node dist/main.js`; worker service command → `node dist/worker.js`.
+**Interfaces:**
+- Produces: `docker compose up --build` runs db + api + worker
+- Dockerfile `CMD` → `node dist/main.js`; worker command → `node dist/worker.js`
 
-- [ ] **Step 1–6:** Same as before (Compose `db` + `api` + `worker`, GHA lint/typecheck/test/build, README run + sample query from contracts)
+- [ ] **Step 1: Multi-stage Dockerfile**
+
+```dockerfile
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate && npm run build
+
+FROM node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/docs/contracts/schema.graphql ./docs/contracts/schema.graphql
+USER node
+CMD ["node", "dist/main.js"]
+```
+
+- [ ] **Step 2: Extend Compose with `api` and `worker`** (depend on healthy `db`; pass `DATABASE_URL`)
+
+- [ ] **Step 3: Optional CI job `docker build .`**
+
+- [ ] **Step 4: README — how to run unit tests, integration tests, Compose stack, sample query**
+
+- [ ] **Step 5: Verify**
 
 ```bash
+npm test
+docker compose up -d db && npm run test:integration
+docker compose up --build -d
+curl -s http://localhost:3000/health
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add Dockerfile docker-compose.yml .github/workflows/ci.yml README.md
 git commit -m "$(cat <<'EOF'
-chore: add Docker Compose, GitHub Actions CI, and run docs
+chore: add Nest app/worker images and full local run docs
 
 EOF
 )"
 ```
+
 ---
 
 ## Spec coverage matrix (self-review)
@@ -666,12 +833,13 @@ EOF
 | FR-O2 configurable interval | 1 (`config`), 7 |
 | FR-O3 retry + circuit breaker | 4 |
 | FR-O4 health | 8 |
-| FR-O5 structured logs | 4, 7 (add `console` JSON or pino in those tasks) |
+| FR-O5 structured logs | 4, 7 |
 | Availability / stale | 6, 8 |
 | Performance budgets | 6 (timeouts in config) |
 | Testability scoring | 2 |
-| Horizontal scale / Docker | 9 |
-| CI | 9 |
+| Early unit CI | **2b** |
+| Postgres Compose + integration CI | **3** |
+| Full app Docker + README runbook | **9** |
 | GraphQL contract | `docs/contracts` + 6 |
 | DB design | `docs/contracts/prisma-schema.md` + 3 |
 | seq-happy-path | 6 |
@@ -687,16 +855,19 @@ EOF
 - No OpenAPI/Swagger
 - No `ActivityScoreDay` table in v1
 - Scoring unit tests never import Prisma
+- CI unit job never requires Postgres; integration job does
 
 ---
 
 ## Execution handoff
 
-Plan complete and saved to `docs/superpowers/plans/2026-07-28-weather-activity-ranking.md`.
+Plan updated for early CI/Compose. Path: `docs/superpowers/plans/2026-07-28-weather-activity-ranking.md`.
 
-**Two execution options for the Code stage:**
+**Current Code progress:** Task 1 done → next **Task 2 (scoring)**, then **Task 2b (early CI)**, then **Task 3 (db Compose + Prisma + integration CI)**.
 
-1. **Subagent-Driven (recommended)** — fresh subagent per task, review between tasks (`superpowers:subagent-driven-development`)
-2. **Inline Execution** — execute tasks in this session (`superpowers:executing-plans`)
+**Two execution options:**
+
+1. **Subagent-Driven (recommended)** — fresh subagent per task
+2. **Inline Execution** — execute tasks in this session
 
 Which approach?
