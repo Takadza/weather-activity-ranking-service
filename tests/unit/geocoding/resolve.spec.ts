@@ -146,7 +146,7 @@ describe('resolveLocationInput', () => {
       location: parisLocation,
       alternatives: [texasLocation],
     });
-    expect(deps.geocode).toHaveBeenCalledWith('paris');
+    expect(deps.geocode).toHaveBeenCalledWith('PARIS');
     expect(deps.upsertGeocodeCache).toHaveBeenCalledWith({
       queryNormalized: 'paris',
       resultsJson: [paris, parisTexas],

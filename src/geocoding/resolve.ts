@@ -65,7 +65,7 @@ export async function resolveLocationInput(
   const cache = await deps.findGeocodeCache(queryNormalized);
   const candidates = cache
     ? candidatesFromCache(cache)
-    : await deps.geocode(queryNormalized);
+    : await deps.geocode(trimmedName);
 
   if (candidates.length === 0) {
     throw invalidInput();
