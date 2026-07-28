@@ -1,6 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import type { WeatherDay } from '../scoring/types';
 import { PrismaService } from './prisma.service';
+import type { ForecastMeta } from './types';
+
+const FORECAST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseForecastDate(date: string): Date {
+  if (!FORECAST_DATE_RE.test(date)) {
+    throw new Error(`Invalid forecast date: ${date}`);
+  }
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid forecast date: ${date}`);
+  }
+  return parsed;
+}
+
+function startOfUtcDay(date = new Date()): Date {
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
+  );
+}
 
 @Injectable()
 export class ForecastsRepository {
@@ -18,15 +38,36 @@ export class ForecastsRepository {
     }
 
     const fetchedAt = new Date();
-    const forecastDates = days.map(
-      (day) => new Date(`${day.date}T00:00:00.000Z`),
+    const forecastDates = days.map((day) => parseForecastDate(day.date));
+    const windowStart = new Date(
+      Math.min(...forecastDates.map((d) => d.getTime())),
     );
+    const windowEnd = new Date(
+      Math.max(...forecastDates.map((d) => d.getTime())),
+    );
+    const today = startOfUtcDay();
 
     await this.prisma.$transaction(async (transaction) => {
+      // Serialize concurrent refresh/cold-start writers for the same location.
+      await transaction.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${locationId}))
+      `;
+
+      // Drop past days always; inside the payload range, drop dates not present
+      // so a truncated payload cannot erase days outside its span.
       await transaction.forecastDay.deleteMany({
         where: {
           locationId,
-          forecastDate: { notIn: forecastDates },
+          OR: [
+            { forecastDate: { lt: today } },
+            {
+              forecastDate: {
+                gte: windowStart,
+                lte: windowEnd,
+                notIn: forecastDates,
+              },
+            },
+          ],
         },
       });
 
@@ -76,5 +117,14 @@ export class ForecastsRepository {
       waveHeightM: day.waveHeightM,
       weatherCode: day.weatherCode,
     }));
+  }
+
+  async getForecastMeta(locationId: string): Promise<ForecastMeta> {
+    const latest = await this.prisma.forecastDay.findFirst({
+      where: { locationId },
+      orderBy: { fetchedAt: 'desc' },
+      select: { fetchedAt: true },
+    });
+    return { fetchedAt: latest?.fetchedAt ?? null };
   }
 }

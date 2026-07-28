@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { Location } from '@prisma/client';
 import { PrismaService } from './prisma.service';
+import type { LocationRow } from './types';
 
 export type LocationInput = {
   name: string;
@@ -14,7 +14,7 @@ export type LocationInput = {
 export class LocationsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findOrCreateLocation(input: LocationInput): Promise<Location> {
+  async findOrCreateLocation(input: LocationInput): Promise<LocationRow> {
     return this.prisma.location.upsert({
       where: {
         latitude_longitude: {
@@ -23,6 +23,7 @@ export class LocationsRepository {
         },
       },
       create: input,
+      // Preserve the original name/country/admin1 on coordinate match.
       update: {},
     });
   }

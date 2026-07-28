@@ -13,7 +13,6 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npx prisma generate
         env:
           DATABASE_URL: postgresql://unused:unused@localhost:5432/unused
       - run: npm run lint
@@ -46,6 +45,11 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npx prisma generate
       - run: npx prisma migrate deploy
+      - name: Schema drift check
+        run: >
+          npx prisma migrate diff
+          --from-config-datasource
+          --to-schema prisma/schema.prisma
+          --exit-code
       - run: npm run test:integration

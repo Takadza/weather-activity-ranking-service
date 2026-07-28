@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import type { RefreshMeta } from '@prisma/client';
 import { PrismaService } from './prisma.service';
+import type { RefreshMetaRow } from './types';
 
 const REFRESH_META_ID = 1;
 
@@ -8,7 +8,7 @@ const REFRESH_META_ID = 1;
 export class RefreshMetaRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getRefreshMeta(): Promise<RefreshMeta> {
+  async getRefreshMeta(): Promise<RefreshMetaRow> {
     return this.prisma.refreshMeta.upsert({
       where: { id: REFRESH_META_ID },
       create: { id: REFRESH_META_ID },
@@ -24,6 +24,7 @@ export class RefreshMetaRepository {
         id: REFRESH_META_ID,
         lastAttemptAt: now,
         lastSuccessAt: now,
+        lastError: null,
       },
       update: {
         lastAttemptAt: now,

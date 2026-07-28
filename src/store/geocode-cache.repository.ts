@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import type { GeocodeCache, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
+import type { GeocodeCacheRow } from './types';
 
 export type GeocodeCacheInput = {
   queryNormalized: string;
-  resultsJson: Prisma.InputJsonValue;
+  resultsJson: unknown;
   bestLocationId?: string | null;
   fetchedAt: Date;
 };
@@ -13,12 +14,18 @@ export type GeocodeCacheInput = {
 export class GeocodeCacheRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  async upsertGeocodeCache(input: GeocodeCacheInput): Promise<GeocodeCache> {
+  async upsertGeocodeCache(input: GeocodeCacheInput): Promise<GeocodeCacheRow> {
+    const resultsJson = input.resultsJson as Prisma.InputJsonValue;
     return this.prisma.geocodeCache.upsert({
       where: { queryNormalized: input.queryNormalized },
-      create: input,
+      create: {
+        queryNormalized: input.queryNormalized,
+        resultsJson,
+        bestLocationId: input.bestLocationId,
+        fetchedAt: input.fetchedAt,
+      },
       update: {
-        resultsJson: input.resultsJson,
+        resultsJson,
         bestLocationId: input.bestLocationId,
         fetchedAt: input.fetchedAt,
       },

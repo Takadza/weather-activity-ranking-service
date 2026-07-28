@@ -3,6 +3,7 @@
   "rootDir": "..",
   "testMatch": ["<rootDir>/tests/integration/**/*.spec.ts"],
   "modulePathIgnorePatterns": ["<rootDir>/.worktrees/"],
+  "setupFiles": ["dotenv/config"],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   },

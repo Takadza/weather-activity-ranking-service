@@ -16,10 +16,10 @@ Follow the stages in order. Each step links to the next.
 | **1. Clarify** | Done | [docs/01-requirements-and-estimation.md](docs/01-requirements-and-estimation.md) |
 | **2. Design** | Done | [docs/02-system-design.md](docs/02-system-design.md) → see Design packet below |
 | **3. TDD plan** | Done | [docs/superpowers/plans/2026-07-28-weather-activity-ranking.md](docs/superpowers/plans/2026-07-28-weather-activity-ranking.md) |
-| **4. Code** | Not started | Implement the TDD plan task-by-task |
+| **4. Code** | In progress | Tasks 1–3 done (scaffold, scoring, Postgres/Prisma store); continue TDD plan |
 | **5. Review** | Not started | README runbook + deliberate cuts (after Code) |
 
-**Current stage:** Design + TDD plan complete → **ready for Code**.
+**Current stage:** Code in progress (through Task 3).
 
 Full doc index (same flow): [docs/README.md](docs/README.md)
 
