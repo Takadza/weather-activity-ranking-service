@@ -200,4 +200,53 @@ describe('GraphQL activityRanking', () => {
     );
     expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
   });
+
+  it('cold-start empty payload: returns PROVIDER_UNAVAILABLE', async () => {
+    openMeteo.fetchForecast.mockResolvedValue([]);
+
+    const res = await request(app.getHttpServer())
+      .post('/graphql')
+      .send({
+        query: RANKING_QUERY,
+        variables: {
+          location: { latitude: FAIL_LAT, longitude: FAIL_LON },
+        },
+      })
+      .expect(200);
+
+    expect(res.body.data).toBeNull();
+    expect(res.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          extensions: expect.objectContaining({
+            code: 'PROVIDER_UNAVAILABLE',
+          }),
+        }),
+      ]),
+    );
+    expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalid input: returns BAD_USER_INPUT when location is empty', async () => {
+    const res = await request(app.getHttpServer())
+      .post('/graphql')
+      .send({
+        query: RANKING_QUERY,
+        variables: { location: {} },
+      })
+      .expect(200);
+
+    expect(res.body.data).toBeNull();
+    expect(res.body.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          extensions: expect.objectContaining({
+            code: 'BAD_USER_INPUT',
+          }),
+        }),
+      ]),
+    );
+    expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
+    expect(openMeteo.geocode).not.toHaveBeenCalled();
+  });
 });

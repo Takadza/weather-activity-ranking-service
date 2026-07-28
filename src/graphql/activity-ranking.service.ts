@@ -1,9 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GraphQLError } from 'graphql';
 import { BadUserInputError } from '../geocoding/errors';
 import { GeocodingService } from '../geocoding/geocoding.service';
-import type { ResolveLocationInput } from '../geocoding/resolve';
+import type {
+  ResolveLocationInput,
+  ResolveLocationResult,
+} from '../geocoding/resolve';
 import { OpenMeteoClient } from '../open-meteo/client';
 import { RUBRIC_VERSION, ScoringService } from '../scoring/scoring.service';
 import type { WeatherDay } from '../scoring/types';
@@ -22,6 +25,8 @@ export type ActivityRankingPayload = {
 
 @Injectable()
 export class ActivityRankingService {
+  private readonly logger = new Logger(ActivityRankingService.name);
+
   constructor(
     private readonly geocoding: GeocodingService,
     private readonly forecasts: ForecastsRepository,
@@ -31,7 +36,7 @@ export class ActivityRankingService {
   ) {}
 
   async rank(input: ResolveLocationInput): Promise<ActivityRankingPayload> {
-    let resolved;
+    let resolved: ResolveLocationResult;
     try {
       resolved = await this.geocoding.resolve(input);
     } catch (err) {
@@ -81,17 +86,26 @@ export class ActivityRankingService {
 
   private async coldStart(location: LocationRow): Promise<WeatherDay[]> {
     const timeoutMs = this.config.get<number>('coldStartTimeoutMs', 3000);
+    let fetched: WeatherDay[];
     try {
-      const fetched = await this.openMeteo.fetchForecast(
+      fetched = await this.openMeteo.fetchForecast(
         location.latitude,
         location.longitude,
         { signal: AbortSignal.timeout(timeoutMs) },
       );
-      if (fetched.length > 0) {
-        await this.forecasts.upsertForecastDays(location.id, fetched);
-      }
-    } catch {
-      // Cold-start failures surface as PROVIDER_UNAVAILABLE when still empty.
+    } catch (err) {
+      // Provider/timeout failures surface as PROVIDER_UNAVAILABLE when still empty.
+      this.logger.warn(
+        `Cold-start forecast fetch failed for location ${location.id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return this.forecasts.getForecastDays(location.id);
+    }
+
+    // Persistence errors must propagate — do not mislabel as provider failure.
+    if (fetched.length > 0) {
+      await this.forecasts.upsertForecastDays(location.id, fetched);
     }
     return this.forecasts.getForecastDays(location.id);
   }
