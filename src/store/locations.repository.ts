@@ -27,4 +27,10 @@ export class LocationsRepository {
       update: {},
     });
   }
+
+  async listTrackedLocations(): Promise<LocationRow[]> {
+    return this.prisma.location.findMany({
+      orderBy: { id: 'asc' },
+    });
+  }
 }
