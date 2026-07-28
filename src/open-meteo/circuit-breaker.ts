@@ -26,6 +26,8 @@ export class CircuitBreaker {
   private consecutiveFailures = 0;
   private state: CircuitState = 'closed';
   private openedAt = 0;
+  /** Ensures only one concurrent half-open probe after cool-down. */
+  private halfOpenProbeInFlight = false;
 
   constructor(opts: CircuitBreakerOptions = {}) {
     this.failureThreshold = opts.failureThreshold ?? 3;
@@ -42,17 +44,31 @@ export class CircuitBreaker {
       if (this.now() - this.openedAt < this.coolDownMs) {
         throw new CircuitOpenError();
       }
+      if (this.halfOpenProbeInFlight) {
+        throw new CircuitOpenError();
+      }
       this.state = 'half-open';
+      this.halfOpenProbeInFlight = true;
+    } else if (this.state === 'half-open' && this.halfOpenProbeInFlight) {
+      throw new CircuitOpenError();
+    } else if (this.state === 'half-open') {
+      this.halfOpenProbeInFlight = true;
     }
 
     try {
       const result = await fn();
       this.consecutiveFailures = 0;
       this.state = 'closed';
+      this.halfOpenProbeInFlight = false;
       return result;
     } catch (err) {
       // Caller cancellation must not count as a provider failure.
       if (isAbortError(err)) {
+        this.halfOpenProbeInFlight = false;
+        // Revert to open without resetting cool-down so the next caller can probe.
+        if (this.state === 'half-open') {
+          this.state = 'open';
+        }
         throw err;
       }
       this.consecutiveFailures += 1;
@@ -63,6 +79,7 @@ export class CircuitBreaker {
         this.state = 'open';
         this.openedAt = this.now();
       }
+      this.halfOpenProbeInFlight = false;
       throw err;
     }
   }

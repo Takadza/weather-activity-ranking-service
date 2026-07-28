@@ -19,6 +19,10 @@ export type OpenMeteoClientOptions = {
   maxAttempts?: number;
   /** Per-request timeout; combined with any caller AbortSignal. */
   timeoutMs?: number;
+  /** 0..1 — injected for deterministic backoff jitter in tests. */
+  random?: () => number;
+  /** Optional hook when marine fetch fails (best-effort path). */
+  onMarineError?: (err: unknown) => void;
 };
 
 export class HttpError extends Error {
@@ -27,6 +31,7 @@ export class HttpError extends Error {
   constructor(
     readonly status: number,
     message?: string,
+    readonly retryAfterMs?: number,
   ) {
     super(message ?? `HTTP ${status}`);
   }
@@ -50,10 +55,6 @@ function isTransientError(err: unknown): boolean {
   if (err instanceof HttpError) {
     return err.status >= 500 || err.status === 429;
   }
-  if (err instanceof Error && /HTTP 5\d\d/.test(err.message)) {
-    return true;
-  }
-  // Network / fetch failures (not caller abort)
   if (err instanceof Error && err.name === 'AbortError') {
     return false;
   }
@@ -80,6 +81,45 @@ function combineSignals(
   return AbortSignal.any(signals);
 }
 
+/** Parse Retry-After as delay-seconds or HTTP-date → milliseconds. */
+export function parseRetryAfterMs(
+  header: string | null,
+  nowMs: number = Date.now(),
+): number | undefined {
+  if (!header) return undefined;
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) * 1000;
+  }
+  const when = Date.parse(trimmed);
+  if (!Number.isNaN(when)) {
+    return Math.max(0, when - nowMs);
+  }
+  return undefined;
+}
+
+async function httpErrorFromResponse(res: Response): Promise<HttpError> {
+  let reason: string | undefined;
+  try {
+    const body: unknown = await res.json();
+    if (
+      body &&
+      typeof body === 'object' &&
+      'reason' in body &&
+      typeof body.reason === 'string'
+    ) {
+      reason = (body as { reason: string }).reason;
+    }
+  } catch {
+    // Body may be empty or non-JSON.
+  }
+  const retryAfterMs = parseRetryAfterMs(res.headers.get('Retry-After'));
+  const message = reason
+    ? `HTTP ${res.status}: ${reason}`
+    : `HTTP ${res.status}`;
+  return new HttpError(res.status, message, retryAfterMs);
+}
+
 export class OpenMeteoClient {
   private readonly fetchImpl: typeof fetch;
   private readonly sleep: SleepFn;
@@ -89,6 +129,8 @@ export class OpenMeteoClient {
   private readonly geocodeBaseUrl: string;
   private readonly maxAttempts: number;
   private readonly timeoutMs: number | undefined;
+  private readonly random: () => number;
+  private readonly onMarineError?: (err: unknown) => void;
 
   constructor(opts: OpenMeteoClientOptions = {}) {
     this.fetchImpl = opts.fetch ?? fetch.bind(globalThis);
@@ -102,6 +144,8 @@ export class OpenMeteoClient {
       opts.geocodeBaseUrl ?? 'https://geocoding-api.open-meteo.com/v1/search';
     this.maxAttempts = opts.maxAttempts ?? 3;
     this.timeoutMs = opts.timeoutMs;
+    this.random = opts.random ?? Math.random;
+    this.onMarineError = opts.onMarineError;
   }
 
   async fetchForecast(
@@ -128,28 +172,30 @@ export class OpenMeteoClient {
 
     const signal = combineSignals(this.timeoutMs, opts?.signal);
 
-    const forecast = await this.circuitBreaker.exec(() =>
-      this.fetchJsonWithRetry<OpenMeteoForecastResponse>(
-        forecastUrl.toString(),
-        signal,
-      ),
-    );
-
-    // Marine is best-effort and must not trip the shared forecast/geocode breaker.
-    let marine: OpenMeteoMarineResponse | null = null;
-    try {
-      marine = await this.fetchJsonWithRetry<OpenMeteoMarineResponse>(
+    // Start marine only once the breaker admits a forecast attempt (no marine
+    // when circuit is open). Inside the attempt, both requests overlap.
+    let marineP: Promise<OpenMeteoMarineResponse | null> =
+      Promise.resolve(null);
+    const forecast = await this.circuitBreaker.exec(async () => {
+      marineP = this.fetchJsonWithRetry<OpenMeteoMarineResponse>(
         marineUrl.toString(),
         signal,
+      ).then(
+        (body) => body,
+        (err: unknown) => {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw err;
+          }
+          this.onMarineError?.(err);
+          return null;
+        },
       );
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw err;
-      }
-      // Still return forecast days with waveHeightM null.
-      marine = null;
-    }
-
+      return this.fetchJsonWithRetry<OpenMeteoForecastResponse>(
+        forecastUrl.toString(),
+        signal,
+      );
+    });
+    const marine = await marineP;
     return this.mapForecastDays(forecast, marine);
   }
 
@@ -231,6 +277,15 @@ export class OpenMeteoClient {
     });
   }
 
+  private backoffMs(attempt: number, retryAfterMs?: number): number {
+    if (retryAfterMs != null && retryAfterMs > 0) {
+      return retryAfterMs;
+    }
+    const base = 100 * 2 ** (attempt - 1);
+    const jitter = Math.floor(this.random() * base * 0.5);
+    return base + jitter;
+  }
+
   private async fetchJsonWithRetry<T>(
     url: string,
     signal?: AbortSignal,
@@ -240,7 +295,7 @@ export class OpenMeteoClient {
       try {
         const res = await this.fetchImpl(url, { signal });
         if (!res.ok) {
-          throw new HttpError(res.status);
+          throw await httpErrorFromResponse(res);
         }
         return (await res.json()) as T;
       } catch (err) {
@@ -249,7 +304,9 @@ export class OpenMeteoClient {
         if (!retryable || attempt === this.maxAttempts) {
           throw err;
         }
-        await this.sleep(100 * 2 ** (attempt - 1));
+        const retryAfterMs =
+          err instanceof HttpError ? err.retryAfterMs : undefined;
+        await this.sleep(this.backoffMs(attempt, retryAfterMs));
       }
     }
     throw lastError;

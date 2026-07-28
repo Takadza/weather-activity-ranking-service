@@ -47,4 +47,28 @@ describe('CircuitBreaker', () => {
     await expect(b.exec(() => Promise.resolve('ok'))).resolves.toBe('ok');
     expect(b.getState()).toBe('closed');
   });
+
+  it('allows only one concurrent half-open probe', async () => {
+    const b = new CircuitBreaker({ failureThreshold: 1, coolDownMs: 60_000 });
+    await expect(
+      b.exec(() => Promise.reject(new Error('boom'))),
+    ).rejects.toThrow('boom');
+    expect(b.getState()).toBe('open');
+
+    jest.advanceTimersByTime(60_000);
+
+    let release!: (v: string) => void;
+    const gate = new Promise<string>((r) => {
+      release = r;
+    });
+
+    const probe = b.exec(() => gate);
+    await expect(b.exec(() => Promise.resolve('nope'))).rejects.toThrow(
+      CircuitOpenError,
+    );
+
+    release('ok');
+    await expect(probe).resolves.toBe('ok');
+    expect(b.getState()).toBe('closed');
+  });
 });
