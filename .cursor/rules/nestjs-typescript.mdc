@@ -1,0 +1,41 @@
+---
+description: NestJS + TypeScript conventions for weather-activity-ranking-service
+globs: **/*.{ts,tsx}
+alwaysApply: false
+---
+
+# NestJS + TypeScript conventions
+
+## Stack
+
+- NestJS modular monolith, TypeScript, Node.js 22+, Jest (Nest default — not Vitest)
+- GraphQL via Nest Apollo (schema-first); PostgreSQL + Prisma; pure scoring
+
+## File structure (target)
+
+Follow `docs/superpowers/plans/2026-07-28-weather-activity-ranking.md`:
+
+- `src/main.ts` — API bootstrap; `src/worker.ts` — worker bootstrap (Task 7)
+- `src/app.module.ts` / `src/app.worker.module.ts`
+- Feature folders: `config/`, `scoring/`, `store/`, `open-meteo/`, `geocoding/`, `graphql/`, `refresh/`, `health/`
+- Tests under `tests/unit/` and `tests/integration/` (adapt Jest config when adding them)
+
+## Do
+
+- Organize by **feature module** (`XxxModule` + colocated service/resolver/repository)
+- Import feature modules from root `AppModule`; keep module boundaries clear
+- Use `ConfigModule.forRoot({ isGlobal: true })` — do not re-import ConfigModule everywhere
+- Keep **scoring pure**: algorithms unit-testable without Nest DI / Prisma / HTTP
+- Prefer **strict** TypeScript (`strictNullChecks`, `noImplicitAny`); keep Nest CLI `tsconfig` defaults
+- Use Jest (`describe` / `it` / `expect`); when adapting plan snippets that import `vitest`, convert to Jest
+
+## Don't
+
+- Don't call Open-Meteo on the warm GraphQL path (persist + compute-on-read)
+- Don't wire GraphQL / Prisma / refresh worker ahead of their plan tasks
+- Don't introduce microservices or Vitest for this submission
+- Don't put Nest tutorials or style guides into `docs/01`–`05` (design docs stay product/system)
+
+## Config env keys
+
+`DATABASE_URL`, `PORT`, `REFRESH_INTERVAL_MS`, `REFRESH_CONCURRENCY`, `OPEN_METEO_TIMEOUT_MS`, `COLD_START_TIMEOUT_MS`, `STALE_AFTER_SECONDS`, `LOG_LEVEL`
