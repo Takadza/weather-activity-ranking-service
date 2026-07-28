@@ -119,6 +119,34 @@ describe('OpenMeteoClient', () => {
     expect(days[0].tempMaxC).toBe(10);
   });
 
+  it('does not trip shared circuit breaker on marine-only failures', async () => {
+    // Threshold 1: a single recorded marine failure must not open the shared
+    // breaker and block a later fetchForecast (weather still maps; waves null).
+    const breaker = new CircuitBreaker({ failureThreshold: 1 });
+    const fetchMock = jest.fn((url: string | URL) => {
+      const href = String(url);
+      if (href.includes('marine-api')) {
+        return Promise.resolve(jsonResponse({ error: true }, 500));
+      }
+      return Promise.resolve(jsonResponse({ daily: forecastDaily }));
+    });
+    const client = new OpenMeteoClient({
+      fetch: fetchMock as unknown as typeof fetch,
+      sleep: noopSleep,
+      circuitBreaker: breaker,
+    });
+
+    for (let i = 0; i < 3; i++) {
+      const days = await client.fetchForecast(1, 2);
+      expect(days[0].tempMaxC).toBe(10);
+      expect(days.every((d) => d.waveHeightM === null)).toBe(true);
+    }
+
+    const after = await client.fetchForecast(1, 2);
+    expect(after[0].tempMaxC).toBe(10);
+    expect(after.every((d) => d.waveHeightM === null)).toBe(true);
+  });
+
   it('passes AbortSignal through to fetch', async () => {
     const fetchMock = jest.fn((url: string | URL) => {
       const href = String(url);

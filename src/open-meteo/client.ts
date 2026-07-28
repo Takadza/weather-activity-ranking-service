@@ -98,16 +98,18 @@ export class OpenMeteoClient {
       ),
     );
 
+    // Marine is best-effort and must not trip the shared forecast/geocode breaker.
     let marine: OpenMeteoMarineResponse | null = null;
     try {
-      marine = await this.circuitBreaker.exec(() =>
-        this.fetchJsonWithRetry<OpenMeteoMarineResponse>(
-          marineUrl.toString(),
-          opts?.signal,
-        ),
+      marine = await this.fetchJsonWithRetry<OpenMeteoMarineResponse>(
+        marineUrl.toString(),
+        opts?.signal,
       );
-    } catch {
-      // Marine is best-effort: still return forecast days with waveHeightM null.
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
+      // Still return forecast days with waveHeightM null.
       marine = null;
     }
 
@@ -212,7 +214,7 @@ export class OpenMeteoClient {
         if (!retryable || attempt === this.maxAttempts) {
           throw err;
         }
-        await this.sleep(attempt * 100);
+        await this.sleep(100 * 2 ** (attempt - 1));
       }
     }
     throw lastError;
