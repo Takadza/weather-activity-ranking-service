@@ -1,0 +1,182 @@
+import { BadUserInputError } from '../../../src/geocoding/errors';
+import { resolveLocationInput } from '../../../src/geocoding/resolve';
+import type { GeocodeResult } from '../../../src/open-meteo/types';
+import type { GeocodeCacheRow, LocationRow } from '../../../src/store/types';
+
+const now = new Date('2026-07-29T00:00:00.000Z');
+
+const paris: GeocodeResult = {
+  name: 'Paris',
+  country: 'France',
+  admin1: 'Île-de-France',
+  latitude: 48.8566,
+  longitude: 2.3522,
+};
+
+const parisTexas: GeocodeResult = {
+  name: 'Paris',
+  country: 'United States',
+  admin1: 'Texas',
+  latitude: 33.6609,
+  longitude: -95.5555,
+};
+
+function locationFor(candidate: GeocodeResult): LocationRow {
+  return {
+    id: `${candidate.latitude},${candidate.longitude}`,
+    ...candidate,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function cacheRow(resultsJson: unknown): GeocodeCacheRow {
+  return {
+    id: 'cache-1',
+    queryNormalized: 'paris',
+    resultsJson,
+    bestLocationId: null,
+    fetchedAt: now,
+  };
+}
+
+function makeDeps(overrides: Record<string, unknown> = {}) {
+  return {
+    geocode: jest.fn<Promise<GeocodeResult[]>, [string]>(),
+    findGeocodeCache: jest.fn<Promise<GeocodeCacheRow | null>, [string]>(),
+    upsertGeocodeCache: jest.fn<Promise<GeocodeCacheRow>, [unknown]>(),
+    findOrCreateLocation: jest.fn<Promise<LocationRow>, [GeocodeResult]>(),
+    now: () => now,
+    ...overrides,
+  };
+}
+
+describe('resolveLocationInput', () => {
+  it('uses coordinates when they are supplied, even with a name', async () => {
+    const location = locationFor({
+      name: 'Given',
+      country: null,
+      admin1: null,
+      latitude: 1,
+      longitude: 2,
+    });
+    const deps = makeDeps({
+      findOrCreateLocation: jest.fn().mockResolvedValue(location),
+    });
+
+    await expect(
+      resolveLocationInput({ name: 'Paris', latitude: 1, longitude: 2 }, deps),
+    ).resolves.toEqual({ location, alternatives: [] });
+    expect(deps.findOrCreateLocation).toHaveBeenCalledWith({
+      name: 'Paris',
+      latitude: 1,
+      longitude: 2,
+    });
+    expect(deps.geocode).not.toHaveBeenCalled();
+    expect(deps.findGeocodeCache).not.toHaveBeenCalled();
+    expect(deps.upsertGeocodeCache).not.toHaveBeenCalled();
+  });
+
+  it('labels coordinate-only locations with their coordinates', async () => {
+    const location = locationFor({
+      name: '1,2',
+      country: null,
+      admin1: null,
+      latitude: 1,
+      longitude: 2,
+    });
+    const deps = makeDeps({
+      findOrCreateLocation: jest.fn().mockResolvedValue(location),
+    });
+
+    await expect(
+      resolveLocationInput({ latitude: 1, longitude: 2 }, deps),
+    ).resolves.toEqual({ location, alternatives: [] });
+    expect(deps.findOrCreateLocation).toHaveBeenCalledWith({
+      name: '1,2',
+      latitude: 1,
+      longitude: 2,
+    });
+  });
+
+  it('uses normalized cache candidates and maps all of them to locations', async () => {
+    const parisLocation = locationFor(paris);
+    const texasLocation = locationFor(parisTexas);
+    const deps = makeDeps({
+      findGeocodeCache: jest
+        .fn()
+        .mockResolvedValue(cacheRow([paris, parisTexas])),
+      findOrCreateLocation: jest
+        .fn()
+        .mockResolvedValueOnce(parisLocation)
+        .mockResolvedValueOnce(texasLocation),
+    });
+
+    await expect(
+      resolveLocationInput({ name: ' Paris ' }, deps),
+    ).resolves.toEqual({
+      location: parisLocation,
+      alternatives: [texasLocation],
+    });
+    expect(deps.findGeocodeCache).toHaveBeenCalledWith('paris');
+    expect(deps.findOrCreateLocation).toHaveBeenNthCalledWith(1, paris);
+    expect(deps.findOrCreateLocation).toHaveBeenNthCalledWith(2, parisTexas);
+    expect(deps.geocode).not.toHaveBeenCalled();
+    expect(deps.upsertGeocodeCache).not.toHaveBeenCalled();
+  });
+
+  it('geocodes a cache miss, persists candidates, and returns alternatives', async () => {
+    const parisLocation = locationFor(paris);
+    const texasLocation = locationFor(parisTexas);
+    const deps = makeDeps({
+      findGeocodeCache: jest.fn().mockResolvedValue(null),
+      geocode: jest.fn().mockResolvedValue([paris, parisTexas]),
+      upsertGeocodeCache: jest
+        .fn()
+        .mockResolvedValue(cacheRow([paris, parisTexas])),
+      findOrCreateLocation: jest
+        .fn()
+        .mockResolvedValueOnce(parisLocation)
+        .mockResolvedValueOnce(texasLocation),
+    });
+
+    await expect(
+      resolveLocationInput({ name: ' PARIS ' }, deps),
+    ).resolves.toEqual({
+      location: parisLocation,
+      alternatives: [texasLocation],
+    });
+    expect(deps.geocode).toHaveBeenCalledWith('paris');
+    expect(deps.upsertGeocodeCache).toHaveBeenCalledWith({
+      queryNormalized: 'paris',
+      resultsJson: [paris, parisTexas],
+      bestLocationId: parisLocation.id,
+      fetchedAt: now,
+    });
+  });
+
+  it.each([
+    ['missing input', {}],
+    ['partial coordinates without a name', { latitude: 1 }],
+    ['blank name', { name: '   ' }],
+    ['name longer than 100 trimmed characters', { name: 'x'.repeat(101) }],
+  ])('throws BadUserInputError for %s', async (_description, input) => {
+    await expect(
+      resolveLocationInput(input, makeDeps()),
+    ).rejects.toBeInstanceOf(BadUserInputError);
+  });
+
+  it.each([
+    ['empty cache candidates', cacheRow([])],
+    ['empty geocode results', null],
+  ])('throws BadUserInputError for %s', async (_description, cache) => {
+    const deps = makeDeps({
+      findGeocodeCache: jest.fn().mockResolvedValue(cache),
+      geocode: jest.fn().mockResolvedValue([]),
+    });
+
+    await expect(
+      resolveLocationInput({ name: 'Paris' }, deps),
+    ).rejects.toBeInstanceOf(BadUserInputError);
+  });
+});

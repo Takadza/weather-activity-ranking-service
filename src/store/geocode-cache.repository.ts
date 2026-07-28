@@ -14,6 +14,14 @@ export type GeocodeCacheInput = {
 export class GeocodeCacheRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async findGeocodeCacheByQuery(
+    queryNormalized: string,
+  ): Promise<GeocodeCacheRow | null> {
+    return this.prisma.geocodeCache.findUnique({
+      where: { queryNormalized },
+    });
+  }
+
   async upsertGeocodeCache(input: GeocodeCacheInput): Promise<GeocodeCacheRow> {
     const resultsJson = input.resultsJson as Prisma.InputJsonValue;
     return this.prisma.geocodeCache.upsert({
