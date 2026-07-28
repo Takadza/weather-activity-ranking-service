@@ -160,6 +160,14 @@ describe('resolveLocationInput', () => {
     ['partial coordinates without a name', { latitude: 1 }],
     ['blank name', { name: '   ' }],
     ['name longer than 100 trimmed characters', { name: 'x'.repeat(101) }],
+    [
+      'overlong name with coordinates',
+      { name: 'x'.repeat(101), latitude: 1, longitude: 2 },
+    ],
+    ['NaN latitude', { latitude: Number.NaN, longitude: 2 }],
+    ['NaN longitude', { latitude: 1, longitude: Number.NaN }],
+    ['latitude out of range', { latitude: 91, longitude: 0 }],
+    ['longitude out of range', { latitude: 0, longitude: 181 }],
   ])('throws BadUserInputError for %s', async (_description, input) => {
     await expect(
       resolveLocationInput(input, makeDeps()),
@@ -169,6 +177,7 @@ describe('resolveLocationInput', () => {
   it.each([
     ['empty cache candidates', cacheRow([])],
     ['empty geocode results', null],
+    ['malformed cache candidates', cacheRow([{ name: 'Paris' }, 'nope'])],
   ])('throws BadUserInputError for %s', async (_description, cache) => {
     const deps = makeDeps({
       findGeocodeCache: jest.fn().mockResolvedValue(cache),
@@ -178,5 +187,43 @@ describe('resolveLocationInput', () => {
     await expect(
       resolveLocationInput({ name: 'Paris' }, deps),
     ).rejects.toBeInstanceOf(BadUserInputError);
+  });
+
+  it('coalesces concurrent cache misses into one geocode call', async () => {
+    const parisLocation = locationFor(paris);
+    let releaseGeocode!: (results: GeocodeResult[]) => void;
+    const geocodeGate = new Promise<GeocodeResult[]>((resolve) => {
+      releaseGeocode = resolve;
+    });
+    const deps = makeDeps({
+      findGeocodeCache: jest.fn().mockResolvedValue(null),
+      geocode: jest.fn().mockReturnValue(geocodeGate),
+      upsertGeocodeCache: jest.fn().mockResolvedValue(cacheRow([paris])),
+      findOrCreateLocation: jest.fn().mockResolvedValue(parisLocation),
+    });
+
+    const first = resolveLocationInput({ name: 'Paris' }, deps);
+    const second = resolveLocationInput({ name: 'Paris' }, deps);
+
+    await new Promise<void>((resolve) => {
+      const check = () => {
+        if (deps.geocode.mock.calls.length > 0) {
+          resolve();
+          return;
+        }
+        setImmediate(check);
+      };
+      check();
+    });
+
+    expect(deps.geocode).toHaveBeenCalledTimes(1);
+    releaseGeocode([paris]);
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { location: parisLocation, alternatives: [] },
+      { location: parisLocation, alternatives: [] },
+    ]);
+    expect(deps.geocode).toHaveBeenCalledTimes(1);
+    expect(deps.upsertGeocodeCache).toHaveBeenCalledTimes(1);
   });
 });
