@@ -1,0 +1,33 @@
+@startuml seq-ambiguous-geocode
+!theme plain
+title Sequence — Ambiguous place name (FR-U3)
+
+actor Client
+participant "GraphQL\nAPI" as GQL
+participant "Geocoding" as Geo
+participant "Open-Meteo\nclient" as OMClient
+cloud "Open-Meteo" as OM
+participant "Store" as Store
+participant "Scorer" as Score
+
+Client -> GQL : query activityRanking(name: "Springfield")
+GQL -> Geo : resolve(name)
+Geo -> OMClient : geocode(name)
+OMClient -> OM : GET geocoding
+OM --> OMClient : multiple candidates
+OMClient --> Geo : ranked candidates
+Geo --> GQL : bestMatch + alternatives[]
+
+GQL -> Store : load/create bestMatch location + forecast
+Store --> GQL : weather features
+GQL -> Score : scoreAll(...)
+Score --> GQL : rankings
+GQL --> Client : location=bestMatch,\nalternatives=[...],\nrankings for bestMatch
+
+note right of Client
+  Client may re-query with lat/lon
+  or a more specific name to
+  disambiguate.
+end note
+
+@enduml

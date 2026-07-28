@@ -1,0 +1,119 @@
+# Prisma database design (v1)
+
+Frozen relational model for implementation. Copy into `prisma/schema.prisma` during Task 3 of the TDD plan.
+
+**Policies**
+
+- Current 7-day forecast window only (no history table)
+- Scores are **compute-on-read** via pure scorer — no `ActivityScoreDay` table in v1
+- Idempotent upsert key: `ForecastDay @@unique([locationId, forecastDate])` (FR-S3)
+
+## ER overview
+
+```mermaid
+erDiagram
+  Location ||--o{ ForecastDay : has
+  Location ||--o| GeocodeCache : bestMatch
+  Location {
+    uuid id PK
+    string name
+    float latitude
+    float longitude
+  }
+  ForecastDay {
+    uuid id PK
+    uuid locationId FK
+    date forecastDate
+    float tempMaxC
+    float precipMm
+    float waveHeightM
+  }
+  GeocodeCache {
+    uuid id PK
+    string queryNormalized UK
+    jsonb resultsJson
+  }
+  RefreshMeta {
+    int id PK
+    datetime lastSuccessAt
+  }
+```
+
+## Exact Prisma schema
+
+```prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Location {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  country   String?
+  admin1    String?
+  latitude  Float
+  longitude Float
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  forecastDays ForecastDay[]
+  geocodeBestFor GeocodeCache[] @relation("GeocodeBestLocation")
+
+  @@unique([latitude, longitude])
+  @@map("locations")
+}
+
+model GeocodeCache {
+  id              String   @id @default(uuid()) @db.Uuid
+  queryNormalized String   @unique @map("query_normalized")
+  resultsJson     Json     @map("results_json")
+  bestLocationId  String?  @map("best_location_id") @db.Uuid
+  fetchedAt       DateTime @map("fetched_at")
+
+  bestLocation Location? @relation("GeocodeBestLocation", fields: [bestLocationId], references: [id])
+
+  @@map("geocode_cache")
+}
+
+model ForecastDay {
+  id            String   @id @default(uuid()) @db.Uuid
+  locationId    String   @map("location_id") @db.Uuid
+  forecastDate  DateTime @map("forecast_date") @db.Date
+  tempMaxC      Float?   @map("temp_max_c")
+  tempMinC      Float?   @map("temp_min_c")
+  precipMm      Float?   @map("precip_mm")
+  precipProbPct Float?   @map("precip_prob_pct")
+  windMaxKmh    Float?   @map("wind_max_kmh")
+  snowfallCm    Float?   @map("snowfall_cm")
+  waveHeightM   Float?   @map("wave_height_m")
+  weatherCode   Int?     @map("weather_code")
+  rawJson       Json?    @map("raw_json")
+  fetchedAt     DateTime @map("fetched_at")
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, forecastDate])
+  @@map("forecast_days")
+}
+
+/// Singleton row: id must always be 1
+model RefreshMeta {
+  id            Int       @id
+  lastSuccessAt DateTime? @map("last_success_at")
+  lastAttemptAt DateTime? @map("last_attempt_at")
+  lastError     String?   @map("last_error")
+
+  @@map("refresh_meta")
+}
+```
+
+## Indexes / notes
+
+- `@@unique([latitude, longitude])` — treat exact floats from geocoder as identity for v1
+- Tracked locations = all rows in `locations` that have been successfully resolved via a client query
+- Worker refreshes every `Location`; cold-start creates the row before upserting `ForecastDay`

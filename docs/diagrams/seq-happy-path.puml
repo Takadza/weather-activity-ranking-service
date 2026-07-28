@@ -1,0 +1,20 @@
+@startuml seq-happy-path
+!theme plain
+title Sequence — Happy-path activity ranking (warm location)
+
+actor Client
+participant "GraphQL\nAPI" as GQL
+participant "Store" as Store
+participant "Scorer" as Score
+database "Postgres" as PG
+
+Client -> GQL : query activityRanking(location)
+GQL -> Store : resolveLocation + getForecastDays
+Store -> PG : SELECT location, forecast_days
+PG --> Store : rows (7 days + last_fetched_at)
+Store --> GQL : WeatherFeatures[]
+GQL -> Score : scoreAll(features, rubricVersion)
+Score --> GQL : ranked activities + reason codes
+GQL --> Client : rankings, lastUpdated, dataAgeSeconds,\nstale=false
+
+@enduml
