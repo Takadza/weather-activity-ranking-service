@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wars
+      POSTGRES_PASSWORD: wars
+      POSTGRES_DB: wars
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wars -d wars"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - wars_pg:/var/lib/postgresql/data
+
+volumes:
+  wars_pg:
