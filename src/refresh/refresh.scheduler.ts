@@ -11,6 +11,7 @@ import { RefreshService } from './refresh.service';
 export class RefreshScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RefreshScheduler.name);
   private timer: ReturnType<typeof setInterval> | undefined;
+  private running = false;
 
   constructor(
     private readonly refresh: RefreshService,
@@ -34,12 +35,19 @@ export class RefreshScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   private async safeRun(): Promise<void> {
+    if (this.running) {
+      this.logger.warn('Skipping refresh cycle; previous cycle still running');
+      return;
+    }
+    this.running = true;
     try {
       await this.refresh.runCycle();
     } catch (err) {
       this.logger.error(
         `Refresh cycle crashed: ${err instanceof Error ? err.message : String(err)}`,
       );
+    } finally {
+      this.running = false;
     }
   }
 }

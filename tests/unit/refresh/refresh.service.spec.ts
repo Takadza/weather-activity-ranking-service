@@ -193,4 +193,22 @@ describe('RefreshService.runCycle', () => {
     expect(maxInFlight).toBeGreaterThan(0);
     expect(maxInFlight).toBeLessThanOrEqual(5);
   });
+
+  it('treats empty forecast payload as a location failure', async () => {
+    const a = location('loc-a', 1, 2);
+    const fetchForecast = jest.fn().mockResolvedValue([]);
+    const {
+      service,
+      upsertForecastDays,
+      recordRefreshSuccess,
+      recordRefreshFailure,
+    } = makeService({ locations: [a], fetchForecast });
+
+    await service.runCycle();
+
+    expect(upsertForecastDays).not.toHaveBeenCalled();
+    expect(recordRefreshFailure).toHaveBeenCalledTimes(1);
+    expect(recordRefreshFailure.mock.calls[0][0]).toMatch(/empty forecast/);
+    expect(recordRefreshSuccess).not.toHaveBeenCalled();
+  });
 });

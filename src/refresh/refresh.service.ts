@@ -55,9 +55,10 @@ export class RefreshService {
       location.latitude,
       location.longitude,
     );
-    if (days.length > 0) {
-      await this.forecasts.upsertForecastDays(location.id, days);
+    if (days.length === 0) {
+      throw new Error('empty forecast payload');
     }
+    await this.forecasts.upsertForecastDays(location.id, days);
   }
 }
 
