@@ -55,6 +55,8 @@ npm test
 
 ### Integration tests (Postgres via Compose)
 
+Requires `DATABASE_URL` (from `.env` after copying `.env.example`, or export the value from `.env.example`).
+
 ```bash
 docker compose up -d db
 npm run test:integration
