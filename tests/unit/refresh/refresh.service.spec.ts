@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { RefreshService } from '../../../src/refresh/refresh.service';
 import type { WeatherDay } from '../../../src/scoring/types';
@@ -74,6 +75,14 @@ function makeService(overrides: {
 }
 
 describe('RefreshService.runCycle', () => {
+  beforeEach(() => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('fetches and upserts each tracked location then records success', async () => {
     const a = location('loc-a', 1, 2);
     const b = location('loc-b', 3, 4);
