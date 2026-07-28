@@ -35,37 +35,34 @@ Exact Nest module tree is in the TDD plan; keep modules aligned with `02` (`Grap
 
 ---
 
-## 3. GitHub Actions CI
+## 3. GitHub Actions CI (phased)
 
-**Trigger:** `push` and `pull_request` to `main` (and feature branches as needed).
+Implement CI **early in Code**, not only at the end (see TDD plan Tasks **2b** and **3**).
 
-**Job: `ci`**
+**Phase A — Task 2b (unit gate, no DB):**
 
 | Step | Command / action |
 |---|---|
 | Checkout | `actions/checkout` |
-| Node | `actions/setup-node` — LTS (e.g. 22.x), `cache: npm` |
+| Node | `actions/setup-node` — LTS 22.x, `cache: npm` |
 | Install | `npm ci` |
 | Lint | `npm run lint` |
-| Typecheck | `npm run typecheck` → `tsc --noEmit` |
-| Unit tests | `npm test` (scoring golden tests must run **without** DB) |
+| Typecheck | `npm run typecheck` |
+| Unit tests | `npm test` (must run **without** Postgres) |
 | Build | `npm run build` |
 
-**Job: `integration` (when integration tests exist)**
+**Phase B — Task 3 (integration job):**
 
 - Service container: `postgres:16-alpine` with health check
-- Env: `DATABASE_URL` pointing at the service
-- `npx prisma migrate deploy` (or `migrate dev` equivalent in CI)
+- `npx prisma migrate deploy`
 - `npm run test:integration`
 
-v1 may start with unit-only CI and add integration once Prisma is wired—document the gap if so.
+**Phase C — Task 9 (optional):**
 
-**Optional job: `docker`**
+- `docker build` for the Nest API image
+- Compose services `api` + `worker` for local full stack (Compose `db` already from Task 3)
 
-- `docker build` to prove the image builds on CI
-- Use Buildx + GHA cache if time allows
-
-### Example workflow skeleton (implement later)
+### Example workflow skeleton (Phase A — add in Task 2b)
 
 ```yaml
 name: ci

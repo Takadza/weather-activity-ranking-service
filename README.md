@@ -44,7 +44,9 @@ Bite-sized red → green implementation plan:
 
 **[docs/superpowers/plans/2026-07-28-weather-activity-ranking.md](docs/superpowers/plans/2026-07-28-weather-activity-ranking.md)**
 
-Order: scaffold → scoring → Prisma store → Open-Meteo client → geocoding → GraphQL → refresh worker → health → Docker/CI.
+Order: scaffold → scoring → **early CI** → **Postgres Compose + Prisma + integration CI** → Open-Meteo → geocoding → GraphQL → worker → health → full Docker/README.
+
+See the plan’s **Testing & CI/CD timing** section.
 
 ---
 
