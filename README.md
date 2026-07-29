@@ -91,6 +91,8 @@ curl -s http://localhost:3000/graphql \
 
 More operations: [docs/contracts/examples.graphql](docs/contracts/examples.graphql) · contract overview: [docs/contracts/README.md](docs/contracts/README.md)
 
+**Postman:** import [postman/weather-activity-ranking.postman_collection.json](postman/weather-activity-ranking.postman_collection.json). Collection auth uses `X-API-Key: local-compose-api-key` (Compose default). Includes multiple cities, coordinates, auth/negative cases, health, and metrics.
+
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/graphql` | `POST` | Activity rankings (API key + rate-limited) |
