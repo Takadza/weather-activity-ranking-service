@@ -46,6 +46,7 @@ Implement CI **early in Code**, not only at the end (see TDD plan Tasks **2b** a
 | Checkout | `actions/checkout` |
 | Node | `actions/setup-node` — LTS 22.x, `cache: npm` |
 | Install | `npm ci` |
+| Audit | `npm audit --omit=dev --audit-level=high` (`ws` pinned via `overrides` to clear Nest GraphQL transitive advisory) |
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
 | Unit tests | `npm test` (must run **without** Postgres) |

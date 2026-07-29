@@ -6,6 +6,7 @@ import { MetricsModule } from './metrics/metrics.module';
 import { OpenMeteoModule } from './open-meteo/open-meteo.module';
 import { RefreshModule } from './refresh/refresh.module';
 import { StoreModule } from './store/store.module';
+import { WorkerHttpServer } from './worker/worker-http.server';
 
 @Module({
   imports: [
@@ -19,5 +20,6 @@ import { StoreModule } from './store/store.module';
     RefreshModule,
     MetricsModule,
   ],
+  providers: [WorkerHttpServer],
 })
 export class AppWorkerModule {}

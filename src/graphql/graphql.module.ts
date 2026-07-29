@@ -19,6 +19,7 @@ const isProd = process.env.NODE_ENV === 'production';
       playground: false,
       introspection: !isProd,
       validationRules: [depthLimit(7)],
+      context: ({ req, res }: { req: unknown; res: unknown }) => ({ req, res }),
       formatError: (formattedError) => {
         if (isProd) {
           const { extensions, ...rest } = formattedError;

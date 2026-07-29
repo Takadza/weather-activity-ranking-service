@@ -64,9 +64,10 @@ Hot-path rule: **do not** call Open-Meteo when forecast rows exist—even if sta
 | Endpoint | Role |
 |---|---|
 | `GET /health/live` | Liveness (no DB) |
-| `GET /health/ready` | Readiness; **503** when `status: "degraded"` |
-| `GET /health` | Compatibility probe (same JSON as ready, always HTTP 200) |
-| GraphQL `health` | Same payload as HTTP health |
+| `GET /health/ready` | Readiness; **503** when `status: "degraded"` or DB unavailable (`status: "unavailable"`) |
+| `GET /health` | Compatibility probe: same JSON as ready for ok/degraded with HTTP 200; may **500** if DB/probe throws — prefer live/ready |
+| GraphQL `health` | Same payload as HTTP health (counts toward GraphQL throttle) |
+| Worker `GET /health/live` | Liveness on `WORKER_METRICS_PORT` (default 3001) |
 
 JSON roughly:
 
@@ -88,6 +89,7 @@ JSON roughly:
 ### 4.2 Logs (structured JSON)
 
 - Production uses JSON Nest logger; `LOG_LEVEL` controls verbosity
+- Each request gets `x-request-id` (incoming or generated); JSON logs include `requestId` when in request scope
 - Refresh cycle start/end, per-location success/fail
 - Open-Meteo errors and circuit transitions
 - Cold-start events (bounded by `COLD_START_MAX_CONCURRENT`)
@@ -101,7 +103,17 @@ Counters are **in-process** (no shared store):
 | API | `GET /metrics` (port 3000) | `cold_starts_total`, `cold_start_rejects_total`, `provider_errors_total` |
 | Worker | `GET /metrics` (port `WORKER_METRICS_PORT`, default 3001) | `refresh_cycles_total`, `refresh_location_failures_total` |
 
+When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. Leave unset for local Compose demos; set in real deployments.
+
 Scrape both processes in production.
+
+### 4.4 Client rate limiting
+
+- Global Nest throttler (defaults: `THROTTLE_LIMIT=60` per `THROTTLE_TTL_MS=60000`)
+- Applies to GraphQL and HTTP; HTTP `/health/*` and `/metrics` are skipped (GraphQL `health` still counts)
+- On GraphQL, over-limit requests surface as a GraphQL error (`Too Many Requests`) rather than a bare HTTP 429
+- Limits are **per process** (in-memory); N API replicas ≈ N× limit
+- Behind a reverse proxy/LB, set `TRUST_PROXY=1` (or hop count) so client IP for throttling is taken from `X-Forwarded-For` correctly — leave unset for direct Compose/port exposure
 
 ---
 
@@ -110,7 +122,9 @@ Scrape both processes in production.
 - No PII collection
 - Validate `LocationInput` (name length cap, finite lat/lon ranges)
 - Parameterised queries only (Prisma)
-- No auth in v1; leave a single middleware hook point on the HTTP server
+- No user auth in v1 (deliberate cut)
+- Helmet security headers on the API; CORS only when `ALLOWED_ORIGINS` is non-empty
+- Client rate limiting (see §4.4); optional `METRICS_TOKEN` for scrape endpoints
 - Secrets only via env (see `05`); never commit `.env`
 
 ---

@@ -33,6 +33,10 @@ services:
       FORECAST_CACHE_TTL_MS: "60000"
       LOG_LEVEL: info
       NODE_ENV: production
+      ALLOWED_ORIGINS: ""
+      METRICS_TOKEN: ""
+      THROTTLE_TTL_MS: "60000"
+      THROTTLE_LIMIT: "60"
     depends_on:
       db:
         condition: service_healthy
@@ -61,6 +65,18 @@ services:
         condition: service_healthy
     # Migrate is idempotent; avoids racing schema before API finishes deploy.
     command: ["sh", "-c", "npx prisma migrate deploy && node dist/worker.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
 
 volumes:
   wars_pg:

@@ -1,4 +1,5 @@
 import { ConsoleLogger, LogLevel } from '@nestjs/common';
+import { getRequestId } from '../common/request-context';
 
 const LEVEL_MAP: Record<string, LogLevel[]> = {
   verbose: ['verbose', 'debug', 'log', 'warn', 'error', 'fatal'],
@@ -25,6 +26,7 @@ function emit(
     context,
     message: typeof message === 'string' ? message : String(message),
     stack,
+    requestId: getRequestId(),
     timestamp: new Date().toISOString(),
   });
   if (level === 'error' || level === 'fatal') {

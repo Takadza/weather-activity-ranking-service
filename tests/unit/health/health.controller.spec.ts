@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { Server } from 'node:http';
 import request from 'supertest';
 import { HealthController } from '../../../src/health/health.controller';
@@ -12,6 +13,7 @@ describe('HealthController', () => {
   beforeEach(async () => {
     getHealth = jest.fn();
     const moduleRef = await Test.createTestingModule({
+      imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 1000 }])],
       controllers: [HealthController],
       providers: [{ provide: HealthService, useValue: { getHealth } }],
     }).compile();
@@ -65,9 +67,19 @@ describe('HealthController', () => {
     await request(app.getHttpServer()).get('/health/ready').expect(503);
   });
 
-  it('returns 500 when the health service fails (e.g. DB unavailable)', async () => {
+  it('GET /health returns 500 when the health service fails (e.g. DB unavailable)', async () => {
     getHealth.mockRejectedValue(new Error('DATABASE_URL is required'));
 
     await request(app.getHttpServer()).get('/health').expect(500);
+  });
+
+  it('GET /health/ready returns 503 unavailable when health service fails', async () => {
+    getHealth.mockRejectedValue(new Error('connection refused'));
+
+    const res = await request(app.getHttpServer())
+      .get('/health/ready')
+      .expect(503);
+
+    expect(res.body).toEqual({ status: 'unavailable', refresh: null });
   });
 });

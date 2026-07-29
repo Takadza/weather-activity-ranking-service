@@ -89,12 +89,15 @@ More operations: [docs/contracts/examples.graphql](docs/contracts/examples.graph
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/graphql` | `POST` | Activity rankings |
+| `/graphql` | `POST` | Activity rankings (rate-limited) |
 | `/health/live` | `GET` | Liveness (no DB) |
-| `/health/ready` | `GET` | Readiness (503 when degraded) |
+| `/health/ready` | `GET` | Readiness (503 when degraded or DB down) |
 | `/health` | `GET` | Compatibility probe (always 200 body) |
 | `/metrics` | `GET` | API Prometheus counters (cold-start / provider) |
+| worker `:3001/health/live` | `GET` | Worker liveness |
 | worker `:3001/metrics` | `GET` | Worker Prometheus counters (refresh) |
+
+Ops env (see `.env.example`): `ALLOWED_ORIGINS`, `METRICS_TOKEN` (set in real deploys), `THROTTLE_TTL_MS`, `THROTTLE_LIMIT`, `TRUST_PROXY` (set behind a reverse proxy). Requests accept/generate `x-request-id`.
 
 ---
 

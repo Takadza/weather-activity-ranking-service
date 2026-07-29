@@ -7,6 +7,7 @@ const envSchema = z.object({
     .default('development'),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   PORT: z.coerce.number().int().min(0).max(65535).optional(),
+  WORKER_METRICS_PORT: z.coerce.number().int().min(0).max(65535).optional(),
   REFRESH_INTERVAL_MS: z.coerce.number().int().positive().optional(),
   REFRESH_CONCURRENCY: z.coerce.number().int().positive().optional(),
   OPEN_METEO_TIMEOUT_MS: z.coerce.number().int().positive().optional(),
@@ -18,6 +19,17 @@ const envSchema = z.object({
   LOG_LEVEL: z
     .enum(['verbose', 'debug', 'log', 'warn', 'error', 'fatal', 'info'])
     .optional(),
+  /** Comma-separated browser origins; empty = CORS disabled. */
+  ALLOWED_ORIGINS: z.string().optional(),
+  /** When set, /metrics requires Authorization: Bearer or X-Metrics-Token. */
+  METRICS_TOKEN: z.string().optional(),
+  THROTTLE_TTL_MS: z.coerce.number().int().positive().optional(),
+  THROTTLE_LIMIT: z.coerce.number().int().positive().optional(),
+  /**
+   * Express trust proxy: unset/empty = off; "1"/"true" = trust one hop;
+   * integer = hop count. Required behind LB for accurate throttle IP.
+   */
+  TRUST_PROXY: z.string().optional(),
 });
 
 /** Fail fast on invalid env; return original config for Nest ConfigModule. */

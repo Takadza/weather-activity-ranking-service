@@ -1,3 +1,11 @@
+function parseAllowedOrigins(raw: string | undefined): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export default () => ({
   databaseUrl: process.env.DATABASE_URL ?? '',
   port: parseInt(process.env.PORT ?? '3000', 10),
@@ -23,4 +31,9 @@ export default () => ({
     10,
   ),
   logLevel: process.env.LOG_LEVEL ?? 'info',
+  allowedOrigins: parseAllowedOrigins(process.env.ALLOWED_ORIGINS),
+  metricsToken: process.env.METRICS_TOKEN?.trim() || '',
+  throttleTtlMs: parseInt(process.env.THROTTLE_TTL_MS ?? '60000', 10),
+  throttleLimit: parseInt(process.env.THROTTLE_LIMIT ?? '60', 10),
+  trustProxy: process.env.TRUST_PROXY?.trim() || '',
 });
