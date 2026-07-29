@@ -1,6 +1,6 @@
 # Weather Activity Ranking Service — Requirements & Estimation
 
-**Stage 1 of 5: Clarify → Design → TDD → Code → Review**
+**Stage 1 of 5: Clarify → Design → Implementation notes → Code → Review**
 
 Constraints, clarifying assumptions, functional & non-functional requirements, and back-of-the-envelope calculations. Architecture, API contracts, ops, and CI/CD are covered in `02`–`05` (Design stage).
 
@@ -46,7 +46,7 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 ### 3.1 User-facing
 
 - **FR-U1:** Given city/town name or lat/lon, return a 7-day forecast-based ranking for skiing, surfing, outdoor sightseeing, and indoor sightseeing
-- **FR-U2:** Every response includes freshness (`lastUpdated` / `dataAgeSeconds`)
+- **FR-U2:** Every response includes freshness (`lastUpdated` / `dataAgeSeconds` / `stale`)
 - **FR-U3:** Ambiguous location → best match + alternatives (Q2)
 - **FR-U4:** Cold-start location still returns a usable result (not a hard failure)
 
@@ -79,7 +79,7 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 | **Scalability** | Stateless read path → horizontal app scaling is a config change; refresh scales with location count, not user QPS |
 | **Extensibility** | New activity = new scoring function on existing persisted fields (no refresh/schema redesign) |
 | **Maintainability** | Scoring, refresh, and GraphQL resolvers are separable concerns |
-| **Testability** | Scoring is pure/deterministic — unit-testable without DB or HTTP (hard requirement for TDD stage) |
+| **Testability** | Scoring is pure/deterministic — unit-testable without DB or HTTP (hard requirement for the scoring module) |
 | **Cost** | Workload fits a small app + DB instance; main “cost” is Open-Meteo rate-limit citizenship |
 | **Observability** | Structured logs; metrics for refresh success/fail, Open-Meteo latency/errors, cache/DB hit ratio |
 | **Security** | No PII collected; validate location input (length, parameterised queries); shared `API_KEY` on GraphQL/HTTP (except `/health/live`); `METRICS_TOKEN` for scrape/detail; Redis rate limits in production |
@@ -177,7 +177,7 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 
 | Risk | Mitigation |
 |---|---|
-| Open-Meteo down/slow | Serve last-known-good + staleness; circuit breaker on hot path |
+| Open-Meteo down/slow | Serve last-known-good + staleness; circuit breaker on provider client (cold-start/refresh) |
 | Open-Meteo rate limits | Configurable interval + concurrency (FR-O2); backoff (FR-O3) |
 | Partial / failed refresh | Idempotent upserts `(location, date)` (FR-S3) |
 | Ambiguous place names | Best match + alternatives (FR-U3) |
@@ -186,11 +186,11 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 
 ### Success criteria
 
-- [ ] Persisted reads **< 300ms p95**
-- [ ] Refresh completes on schedule and is idempotent under retry
-- [ ] Rankings match documented rubric (unit tests with known inputs)
-- [ ] Queries still succeed with staleness flag when Open-Meteo is unavailable
-- [ ] New activity = new scoring function only (no refresh/schema change)
+- [x] Persisted reads **< 300ms p95** (warm path is Postgres-only; design target)
+- [x] Refresh completes on schedule and is idempotent under retry
+- [x] Rankings match documented rubric (unit tests with known inputs)
+- [x] Queries still succeed with staleness flag when Open-Meteo is unavailable
+- [x] New activity = new scoring function only (no refresh/schema change)
 
 ---
 
@@ -207,6 +207,6 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 2. [`03-api-and-domain-design.md`](03-api-and-domain-design.md) — GraphQL consumer contract, data model, scoring rubric
 3. [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md) — refresh, failure modes, observability, cuts
 4. [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md) — GitHub Actions CI/CD, Docker Compose
-5. [TDD plan](superpowers/plans/2026-07-28-weather-activity-ranking.md) — then Code → Review
+5. [Implementation notes](06-implementation-notes.md) — Code + Review complete
 
 Doc index: [`README.md`](README.md).

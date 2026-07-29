@@ -25,7 +25,7 @@ Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation
 
 Idempotency (FR-S3): retries and overlapping runs are safe because upserts replace the same natural key.
 
-See PlantUML: [`diagrams/seq-refresh.puml`](diagrams/seq-refresh.puml).
+See rendered sequence in [`02` §2.1](02-system-design.md#scheduled-refresh) ([SVG](diagrams/seq-refresh.svg) · [`.puml`](diagrams/seq-refresh.puml)).
 
 ---
 
@@ -65,7 +65,7 @@ Hot-path rule: **do not** call Open-Meteo when forecast rows exist—even if sta
 |---|---|
 | `GET /health/live` | Liveness (no DB) |
 | `GET /health/ready` | Readiness; **503** when `status: "degraded"` or DB unavailable (`status: "unavailable"`) |
-| `GET /health` | Compatibility probe: same JSON as ready for ok/degraded with HTTP 200; may **500** if DB/probe throws — prefer live/ready |
+| `GET /health` | Compatibility probe: same JSON as `/health/ready` for ok/degraded with HTTP 200; may **500** if DB/probe throws — prefer `/health/live` and `/health/ready` |
 | GraphQL `health` | Same payload as HTTP health (counts toward GraphQL throttle) |
 | Worker `GET /health/live` | Liveness on `WORKER_METRICS_PORT` (default 3001) |
 
@@ -103,14 +103,14 @@ Counters are **in-process** (no shared store):
 | API | `GET /metrics` (port 3000) | `cold_starts_total`, `cold_start_rejects_total`, `provider_errors_total` |
 | Worker | `GET /metrics` (port `WORKER_METRICS_PORT`, default 3001) | `refresh_cycles_total`, `refresh_location_failures_total` |
 
-When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. **Required when `NODE_ENV=production`.** Public `/health` and `/ready` omit `lastError` unless the same metrics token is presented. Rotate `API_KEY` / `METRICS_TOKEN` periodically; prefer scraping worker metrics on loopback or a private network (TLS at the edge/mesh — the worker HTTP server itself is cleartext by design).
+When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. **Required when `NODE_ENV=production`.** `/health` and `/health/ready` omit `lastError` unless the same metrics token is presented. Rotate `API_KEY` / `METRICS_TOKEN` periodically; prefer scraping worker metrics on loopback or a private network (TLS at the edge/mesh — the worker HTTP server itself is cleartext by design).
 
 Scrape both processes in production.
 
 ### 4.4 Client rate limiting
 
 - Global Nest throttler (defaults: `THROTTLE_LIMIT=60` per `THROTTLE_TTL_MS=60000`)
-- Applies to GraphQL and HTTP; `/health/live` and `/metrics` are skipped (GraphQL `health` still counts; `/health` and `/ready` are throttled)
+- Applies to GraphQL and HTTP; `/health/live` and `/metrics` are skipped (GraphQL `health` still counts; `/health` and `/health/ready` are throttled)
 - On GraphQL, over-limit requests surface as a GraphQL error (`Too Many Requests`) rather than a bare HTTP 429
 - When `REDIS_URL` is set, limits are shared across API replicas; **required in production**
 - Behind a reverse proxy/LB, set `TRUST_PROXY=1` (or hop count) so client IP for throttling is taken from `X-Forwarded-For` correctly — leave unset for direct Compose/port exposure
@@ -153,10 +153,10 @@ Documented for reviewers—focused submission beats exhaustive (`01` + brief).
 
 ## 7. Success checks (ops view)
 
-- [ ] Refresh is idempotent under forced retry
-- [ ] Killing Open-Meteo (mock) still serves warm locations with `stale: true`
-- [ ] Health reflects last refresh success/age
-- [ ] Cold-start respects timeout and does not hang the event loop for other requests
+- [x] Refresh is idempotent under forced retry
+- [x] Killing Open-Meteo (mock) still serves warm locations with `stale: true`
+- [x] Health reflects last refresh success/age
+- [x] Cold-start respects timeout and does not hang the event loop for other requests
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Stage 2 of 5 (Design) — consumer contract, data model, scoring rubric**
 
-Freeze interfaces before TDD/code. Clients consume the GraphQL contract in §1–3; implementers use the data model (§4) and rubric (§5).
+Freeze interfaces before implementation. Clients consume the GraphQL contract in §1–3; implementers use the data model (§4) and rubric (§5).
 
 **Machine-oriented source of truth:** [`contracts/`](contracts/) — [`schema.graphql`](contracts/schema.graphql), [`examples.graphql`](contracts/examples.graphql), [`prisma-schema.md`](contracts/prisma-schema.md), [`contracts/README.md`](contracts/README.md). Prefer those files over copying SDL from this doc.
 
@@ -18,7 +18,7 @@ See [`contracts/README.md`](contracts/README.md) for the canonical consumer guid
 |---|---|---|
 | `/graphql` | `POST` | Activity ranking queries (GraphQL) |
 | `/health/live` | `GET` | Public liveness (no DB) |
-| `/health` / `/ready` | `GET` | Authenticated probes; readiness 503 when degraded |
+| `/health` / `/health/ready` | `GET` | Authenticated probes; readiness 503 when degraded |
 
 - **Content-Type:** `application/json` with GraphQL body `{ "query": "...", "variables": { ... } }`
 - **Auth (v1):** shared `API_KEY` via `X-API-Key` or `Authorization: Bearer`. Required when `NODE_ENV=production`. `/health/live` stays public; `/metrics` uses `METRICS_TOKEN` separately.
@@ -44,7 +44,7 @@ Consumers **must** handle freshness fields on every successful ranking payload: 
 | Situation | Behaviour |
 |---|---|
 | Missing / wrong API key | HTTP 401 or GraphQL `UNAUTHENTICATED` |
-| Valid warm location | `200` + payload; `stale` false if within threshold |
+| Valid warm location | `200` + payload; `stale: false` if within threshold |
 | Ambiguous name | `200` + `location` = best match + `alternatives` populated |
 | Empty / invalid input | GraphQL error (`BAD_USER_INPUT`) — e.g. missing both name and coordinates; name too long |
 | Cold-start success | `200` + payload; may be slower (< 3s) |
@@ -64,15 +64,15 @@ Consumers **must** handle freshness fields on every successful ranking payload: 
 
 ### 4.2 Tracked locations
 
-A location becomes **tracked** when first successfully resolved via a client query (cold-start or warm). The refresh worker iterates tracked locations only.
+A location becomes **tracked** when first successfully resolved by **name** (under `MAX_TRACKED_LOCATIONS`). Coordinate-only lookups do not auto-track. The refresh worker iterates tracked locations only.
 
 ---
 
 ## 5. Scoring rubric (`rubricVersion: "2026-07-28.1"`)
 
-Deterministic pure functions: same weather features → same scores. Unit-test with golden fixtures (TDD stage).
+Deterministic pure functions: same weather features → same scores. Unit-test with golden fixtures.
 
-**Exact algorithm SoT:** TDD plan Task 2 ([`superpowers/plans/2026-07-28-weather-activity-ranking.md`](superpowers/plans/2026-07-28-weather-activity-ranking.md)) and the eventual `src/scoring/` implementation. This section is product guidance; if narrative and code disagree, **code + Task 2 win**.
+**Exact algorithm SoT:** [`src/scoring/`](../src/scoring/) with `rubricVersion: "2026-07-28.1"`. This section is product guidance; if narrative and code disagree, **code wins**.
 
 **Output per activity per day:** `score` ∈ [0, 100] or unavailable; `reasonCodes` explain major drivers (for tests and debugging—not user essays).
 

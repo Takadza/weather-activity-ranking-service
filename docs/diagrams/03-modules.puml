@@ -1,41 +1,28 @@
 @startuml 03-modules
+' Presentation artifact: docs/diagrams/03-modules.svg (hand-authored for GitHub).
 !theme plain
+skinparam linetype ortho
+top to bottom direction
 title Modular monolith — internal modules
 
-package "Activity Ranking Service" {
-  [graphql] as GQL
-  [activity-ranking] as Rank
-  [scoring] as Score
-  [store] as Store
-  [refresh] as Refresh
-  [open-meteo] as OMClient
-  [geocoding] as Geo
+rectangle "Activity Ranking Service" {
+  component "graphql" as GQL
+  component "activity-ranking" as Rank
+  component "scoring" as Score
+  component "geocoding" as Geo
+  component "refresh" as Refresh
+  component "store" as Store
+  component "open-meteo" as OMClient
 }
 
 database "PostgreSQL" as PG
 cloud "Open-Meteo" as OM
 
-GQL --> Rank : resolve query
-Rank --> Store : load location + forecast days
-Rank --> Score : pure functions (no I/O)
-Rank --> Geo : resolve name → candidates
-Rank --> OMClient : cold-start forecast
-Geo --> Store : geocode cache hit/miss
-Geo --> OMClient : miss → geocode API
-Refresh --> Store : list tracked locations\nidempotent upserts
-Refresh --> OMClient : forecast fetch
-OMClient --> OM : HTTP
-Store --> PG : SQL via Prisma
-
-note right of Score
-  Deterministic, versioned rubric.
-  Compute-on-read (no score table).
-  Unit-testable without DB or HTTP.
-end note
-
-note right of GQL
-  Transport only; maps domain errors.
-  In-process function calls.
-end note
+GQL --> Rank
+Rank --> Score
+Rank --> Geo
+Rank --> Refresh
+Store --> PG
+OMClient --> OM
 
 @enduml

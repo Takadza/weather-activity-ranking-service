@@ -1,7 +1,7 @@
 {
   "name": "weather-activity-ranking-service",
   "version": "0.0.1",
-  "description": "Rank next 7 days for skiing, surfing, and sightseeing from persisted Open-Meteo data",
+  "description": "Rank next 7 days for skiing, surfing, outdoor sightseeing, and indoor sightseeing from persisted Open-Meteo data",
   "author": "",
   "private": true,
   "license": "UNLICENSED",

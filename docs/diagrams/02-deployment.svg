@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="380" viewBox="0 0 1000 380" role="img" aria-labelledby="title desc">
+  <title id="title">Deployment — v1 ship vs horizontal scale posture</title>
+  <desc id="desc">Left to right: Client, optional load balancer, API and worker, then PostgreSQL, Redis, and Open-Meteo.</desc>
+  <rect width="1000" height="380" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+  <text x="500" y="32" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Deployment — v1 ship vs horizontal scale posture</text>
+
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#24292f"/>
+    </marker>
+  </defs>
+
+  <!-- Column 1: Client -->
+  <g transform="translate(40,150)">
+    <circle cx="36" cy="8" r="10" fill="none" stroke="#24292f" stroke-width="2"/>
+    <line x1="36" y1="18" x2="36" y2="48" stroke="#24292f" stroke-width="2"/>
+    <line x1="16" y1="30" x2="56" y2="30" stroke="#24292f" stroke-width="2"/>
+    <line x1="36" y1="48" x2="18" y2="70" stroke="#24292f" stroke-width="2"/>
+    <line x1="36" y1="48" x2="54" y2="70" stroke="#24292f" stroke-width="2"/>
+    <text x="36" y="92" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" fill="#24292f">Client</text>
+  </g>
+
+  <!-- Column 2: Edge -->
+  <rect x="140" y="120" width="150" height="130" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="215" y="145" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="12" font-weight="700" fill="#57606a">Edge (optional)</text>
+  <rect x="158" y="165" width="114" height="48" rx="4" fill="#fff" stroke="#24292f" stroke-width="2"/>
+  <text x="215" y="194" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="12" font-weight="700" fill="#24292f">Load Balancer</text>
+
+  <!-- Column 3: App -->
+  <rect x="350" y="70" width="200" height="230" rx="8" fill="#f6f8fa" stroke="#d0d7de"/>
+  <text x="450" y="95" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="12" font-weight="700" fill="#57606a">Application</text>
+  <text x="450" y="112" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">(same Docker image)</text>
+  <rect x="375" y="130" width="150" height="55" rx="4" fill="#fff" stroke="#24292f" stroke-width="2"/>
+  <text x="450" y="152" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#24292f">API replica(s)</text>
+  <text x="450" y="170" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">GraphQL + health</text>
+  <rect x="375" y="210" width="150" height="55" rx="4" fill="#fff" stroke="#24292f" stroke-width="2"/>
+  <text x="450" y="232" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#24292f">Refresh worker ×1</text>
+  <text x="450" y="250" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">schedule-driven</text>
+
+  <!-- Column 4: stores / provider stacked with clear gaps -->
+  <g transform="translate(680,60)">
+    <ellipse cx="70" cy="20" rx="70" ry="16" fill="#fff" stroke="#24292f" stroke-width="2"/>
+    <path d="M0 20 v34" fill="none" stroke="#24292f" stroke-width="2"/>
+    <path d="M140 20 v34" fill="none" stroke="#24292f" stroke-width="2"/>
+    <path d="M0 54 C0 72 140 72 140 54" fill="none" stroke="#24292f" stroke-width="2"/>
+    <text x="70" y="45" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#24292f">PostgreSQL</text>
+  </g>
+
+  <g transform="translate(680,160)">
+    <ellipse cx="70" cy="20" rx="70" ry="16" fill="#fff" stroke="#24292f" stroke-width="2"/>
+    <path d="M0 20 v34" fill="none" stroke="#24292f" stroke-width="2"/>
+    <path d="M140 20 v34" fill="none" stroke="#24292f" stroke-width="2"/>
+    <path d="M0 54 C0 72 140 72 140 54" fill="none" stroke="#24292f" stroke-width="2"/>
+    <text x="70" y="42" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#24292f">Redis</text>
+    <text x="70" y="58" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">throttler store</text>
+  </g>
+
+  <g transform="translate(700,280)">
+    <path d="M20 36 C4 36 0 24 14 18 C14 4 36 0 48 12 C58 0 86 4 86 18 C100 20 100 36 84 36 Z" fill="#fff" stroke="#24292f" stroke-width="2"/>
+    <text x="50" y="30" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="12" font-weight="700" fill="#24292f">Open-Meteo</text>
+  </g>
+
+  <!-- Orthogonal arrows only -->
+  <line x1="100" y1="190" x2="138" y2="190" stroke="#24292f" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="290" y1="190" x2="373" y2="190" stroke="#24292f" stroke-width="2" marker-end="url(#arr)"/>
+  <path d="M450 157 V120 H678" fill="none" stroke="#24292f" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="560" y="112" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">API → Postgres (forecasts)</text>
+  <path d="M525 157 H600 V200 H678" fill="none" stroke="#24292f" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="560" y="192" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">API → Redis (rate limits)</text>
+  <path d="M525 238 H640 V120" fill="none" stroke="#24292f" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="545" y="228" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">Worker → Postgres</text>
+  <path d="M525 255 H640 V300" fill="none" stroke="#24292f" stroke-width="2" marker-end="url(#arr)"/>
+  <text x="545" y="285" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">Worker → Open-Meteo</text>
+
+  <text x="500" y="360" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">v1 Compose ships one API (no LB). API may also call Open-Meteo on cold-start only (dashed path omitted for clarity).</text>
+</svg>

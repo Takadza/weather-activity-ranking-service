@@ -1,6 +1,6 @@
 # Prisma database design (v1)
 
-Frozen relational model for implementation. Copy into `prisma/schema.prisma` during Task 3 of the TDD plan.
+Implemented in [`prisma/schema.prisma`](../../prisma/schema.prisma). `DATABASE_URL` is configured via [`prisma.config.ts`](../../prisma.config.ts) (Prisma 7 — not in the datasource block).
 
 **Policies**
 
@@ -19,6 +19,7 @@ erDiagram
     string name
     float latitude
     float longitude
+    boolean tracked
   }
   ForecastDay {
     uuid id PK
@@ -48,7 +49,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Location {
@@ -58,6 +58,8 @@ model Location {
   admin1    String?
   latitude  Float
   longitude Float
+  /// When true, the refresh worker includes this location. Selected/primary only.
+  tracked   Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -65,6 +67,7 @@ model Location {
   geocodeBestFor GeocodeCache[] @relation("GeocodeBestLocation")
 
   @@unique([latitude, longitude])
+  @@index([tracked])
   @@map("locations")
 }
 
@@ -115,5 +118,6 @@ model RefreshMeta {
 ## Indexes / notes
 
 - `@@unique([latitude, longitude])` — treat exact floats from geocoder as identity for v1
-- Tracked locations = all rows in `locations` that have been successfully resolved via a client query
-- Worker refreshes every `Location`; cold-start creates the row before upserting `ForecastDay`
+- `tracked` + `@@index([tracked])` — refresh worker iterates **tracked** locations only
+- A location becomes tracked when first successfully resolved via a client query (name-based); coordinate-only lookups do not auto-track
+- Cold-start creates/updates the `Location` row before upserting `ForecastDay`

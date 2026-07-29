@@ -1,4 +1,4 @@
-# Open API contract (GraphQL)
+# Consumer API contract (GraphQL)
 
 This folder is the **machine-oriented source of truth** for how to consume the Weather Activity Ranking Service.
 
@@ -12,9 +12,9 @@ The brief requires **GraphQL** (not REST). There is no OpenAPI/Swagger spec.
 |---|---|---|
 | `/graphql` | `POST` | Activity ranking and optional health query |
 | `/health/live` | `GET` | Public liveness (no DB) |
-| `/health` / `/ready` | `GET` | Authenticated probes (API key); `lastError` only with metrics token |
+| `/health` / `/health/ready` | `GET` | Authenticated probes (API key); `lastError` only with metrics token |
 
-**Auth (v1):** shared `API_KEY` via `Authorization: Bearer <key>` or `X-API-Key`. Required when `NODE_ENV=production`. Leave unset only for local non-production DX. `/health/live` is the public liveness probe; `/health` and `/ready` require the API key.
+**Auth (v1):** shared `API_KEY` via `Authorization: Bearer <key>` or `X-API-Key`. Required when `NODE_ENV=production`. Leave unset only for local non-production DX. `/health/live` is the public liveness probe; `/health` and `/health/ready` require the API key.
 
 ## Files
 
@@ -57,3 +57,43 @@ curl -s http://localhost:3000/graphql \
   -H 'X-API-Key: local-compose-api-key' \
   -d '{"query":"query($location: LocationInput!){ activityRanking(location:$location){ location{name} stale rankings{activity overallScore rank} } }","variables":{"location":{"name":"Cape Town"}}}'
 ```
+
+## Example success response (shape)
+
+```json
+{
+  "data": {
+    "activityRanking": {
+      "location": { "name": "Cape Town" },
+      "stale": false,
+      "rubricVersion": "2026-07-28.1",
+      "lastUpdated": "2026-07-28T12:00:00.000Z",
+      "dataAgeSeconds": 120,
+      "rankings": [
+        {
+          "activity": "OUTDOOR_SIGHTSEEING",
+          "overallScore": 78,
+          "rank": 1
+        },
+        {
+          "activity": "SURFING",
+          "overallScore": 65,
+          "rank": 2
+        },
+        {
+          "activity": "INDOOR_SIGHTSEEING",
+          "overallScore": 40,
+          "rank": 3
+        },
+        {
+          "activity": "SKIING",
+          "overallScore": null,
+          "rank": 4
+        }
+      ]
+    }
+  }
+}
+```
+
+Scores and ranks are illustrative; real values depend on persisted forecast data and the rubric in `src/scoring/`.

@@ -1,20 +1,18 @@
 @startuml 01-context
+' Presentation artifact: docs/diagrams/01-context.svg (hand-authored for GitHub).
+' This .puml is a structural sketch only — prefer editing the SVG for layout.
 !theme plain
+skinparam linetype ortho
+left to right direction
 title Context — Weather Activity Ranking Service
 
 actor Client
 rectangle "Activity Ranking Service\n(Node.js / TypeScript)" as App
-cloud "Open-Meteo\n(forecast + geocoding)" as OM
 database "PostgreSQL" as PG
+cloud "Open-Meteo" as OM
 
-Client --> App : GraphQL (POST /graphql)\nHealth (GET /health)
-App --> PG : read / upsert forecasts &\ngeocode cache
-App --> OM : refresh + cold-start only\n(retry / circuit breaker)
-
-note right of App
-  Hot path reads Postgres only.
-  Open-Meteo is not on the
-  critical path for warm locations.
-end note
+Client --> App : GraphQL + health
+App --> PG : warm path
+App ..> OM : refresh + cold-start
 
 @enduml

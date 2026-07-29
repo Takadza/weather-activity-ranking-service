@@ -1,8 +1,8 @@
 # 02 — System Design (HLD, Scale, Technology ADRs)
 
-**Stage 2 of 5: Clarify → Design → TDD → Code → Review**
+**Stage 2 of 5: Clarify → Design → Implementation notes → Code → Review**
 
-High-level architecture, how components talk (PlantUML), horizontal scale posture, and locked technology decisions. API consumer contract and scoring rubric: [`03-api-and-domain-design.md`](03-api-and-domain-design.md). Ops: [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md). CI/CD: [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md).
+High-level architecture, how components talk (SVG diagrams in §2.1), horizontal scale posture, and locked technology decisions. API consumer contract and scoring rubric: [`03-api-and-domain-design.md`](03-api-and-domain-design.md). Ops: [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md). CI/CD: [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md).
 
 Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation.md).
 
@@ -13,7 +13,7 @@ Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation
 - Satisfy FR/NFR from `01` with production judgement, not platform theatre
 - Stay **stateless on the read path** so unknown traffic can be absorbed by **horizontal API replicas**
 - Keep Open-Meteo off the hot path (except bounded cold-start)
-- Show decisions and rejected alternatives clearly for interview review
+- Show decisions and rejected alternatives clearly
 
 ---
 
@@ -30,20 +30,69 @@ Refresh worker (Nest entry) → Open-Meteo → Store (idempotent upserts)
 
 \* Load balancer is a **scale add-on**, not part of the v1 take-home provisioned stack.
 
-### 2.1 Diagrams (PlantUML sources)
+### 2.1 Diagrams
 
-| Diagram | File | Purpose |
-|---|---|---|
-| Context | [`diagrams/01-context.puml`](diagrams/01-context.puml) | External actors and trust boundaries |
-| Deployment | [`diagrams/02-deployment.puml`](diagrams/02-deployment.puml) | Replicas, LB posture, worker |
-| Modules | [`diagrams/03-modules.puml`](diagrams/03-modules.puml) | Internal module boundaries |
-| Happy-path query | [`diagrams/seq-happy-path.puml`](diagrams/seq-happy-path.puml) | Warm read path |
-| Cold-start | [`diagrams/seq-cold-start.puml`](diagrams/seq-cold-start.puml) | FR-U4 |
-| Scheduled refresh | [`diagrams/seq-refresh.puml`](diagrams/seq-refresh.puml) | FR-O1 / FR-S3 |
-| Provider down | [`diagrams/seq-provider-down.puml`](diagrams/seq-provider-down.puml) | Last-known-good |
-| Ambiguous geocode | [`diagrams/seq-ambiguous-geocode.puml`](diagrams/seq-ambiguous-geocode.puml) | FR-U3 |
+Diagrams below are **committed SVG images** (they render on GitHub). Sequence diagrams are generated from PlantUML; architecture diagrams are hand-authored SVGs for clear spacing.
 
-Render with any PlantUML runner (IDE plugin, `plantuml.jar`, or [plantuml.com](https://www.plantuml.com/plantuml)). Sources are the source of truth—do not invent architecture that contradicts them.
+#### Context
+
+![Context](diagrams/01-context.svg)
+
+Warm path is Postgres-only. Open-Meteo is used for scheduled refresh and bounded cold-start only.
+
+#### Deployment
+
+![Deployment](diagrams/02-deployment.svg)
+
+- Optional LB → API replicas + one refresh worker (same Docker image)
+- API → Postgres (forecasts) and Redis (shared rate limits; ADR-005b)
+- Worker → Postgres (upserts) and Open-Meteo (schedule refresh)
+- v1 Compose: one API, no LB; forecast cache stays in-process (ADR-005a)
+
+#### Modules
+
+![Modules](diagrams/03-modules.svg)
+
+| From | Uses |
+|---|---|
+| `graphql` | `activity-ranking` (transport / error mapping only) |
+| `activity-ranking` | `scoring`, `geocoding`, `store`, `open-meteo` (cold-start) |
+| `geocoding` | `store` (cache), `open-meteo` (miss) |
+| `refresh` | `store` (tracked locations + upserts), `open-meteo` (forecast fetch) |
+| `store` | PostgreSQL via Prisma |
+| `open-meteo` | Open-Meteo HTTP |
+
+`scoring` is pure/deterministic (compute-on-read; no score table).
+
+#### Happy-path query (warm)
+
+![Happy-path query](diagrams/seq-happy-path.svg)
+
+Warm read path — Postgres only.
+
+#### Cold-start
+
+![Cold-start](diagrams/seq-cold-start.svg)
+
+FR-U4 — bounded Open-Meteo fetch for a new location.
+
+#### Scheduled refresh
+
+![Scheduled refresh](diagrams/seq-refresh.svg)
+
+FR-O1 / FR-S3 — background worker upserts.
+
+#### Provider down
+
+![Provider down](diagrams/seq-provider-down.svg)
+
+Last-known-good with `stale: true`. Our API availability must not depend on Open-Meteo when forecasts are already persisted.
+
+#### Ambiguous geocode
+
+![Ambiguous geocode](diagrams/seq-ambiguous-geocode.svg)
+
+FR-U3 — best match plus alternatives. Client may re-query with lat/lon or a more specific name.
 
 ### 2.2 Module responsibilities (Nest modules)
 
@@ -86,7 +135,7 @@ Assumption to state: design envelope includes **~10M requests/day** (order-of-ma
 | DB connections / CPU | Connection pooling → PgBouncer → read replica | Document only |
 | Refresh lag / rate limits | Lower worker concurrency or interval; later queue (BullMQ/SQS) | Config knobs yes; queue later |
 | Multi-worker double-refresh | Postgres advisory lock or single leader | Document trigger |
-| Cache miss storms across replicas | Shared Redis | In-memory v1 only |
+| Forecast cache miss storms across replicas | Shared forecast cache (Redis/etc.) | In-process TTL cache in v1 |
 | Multi-region / WAF / API gateway | Platform concern if product needs it | Out of scope |
 
 ### 4.2 Load balancer
@@ -109,7 +158,8 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 | Single Postgres primary | Yes | Yes (Compose) |
 | LB + N replicas | Yes (diagram + ladder) | No (one API container) |
 | CDN | Explicitly N/A | No |
-| Redis | Scale trigger | No (in-process TTL cache OK) |
+| Forecast cache | In-process TTL | Yes (per API instance) |
+| Redis (throttler store) | Shared rate limits | Yes (Compose; required in production) |
 | Microservices | Rejected | No |
 
 ---
@@ -119,7 +169,7 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 ### ADR-001 — NestJS modular monolith (not microservices)
 
 - **Decision:** One NestJS deployable with domain modules; optional `api` / `worker` process split via entrypoint (`main.ts` vs `worker.ts`).
-- **Why:** Matches Collinson Nest BE practice; unknown→~10M req/day still doesn’t justify service mesh. Module seams preserve a future extract of the worker.
+- **Why:** Clear module seams and a single deployable keep the system reviewable; unknown→~10M req/day still doesn’t justify a service mesh. Module boundaries preserve a future extract of the worker.
 - **Rejected:** Microservices per activity or separate geocode/forecast services—premature.
 - **Scale trigger:** Split worker deploy when refresh cadence or resource profile diverges from API.
 
@@ -140,17 +190,24 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 ### ADR-004 — NestJS + GraphQL (Apollo driver) on TypeScript/Node
 
 - **Decision:** **NestJS** modular monolith with GraphQL via the **Apollo driver** (`@nestjs/graphql` + `@nestjs/apollo`). Schema-first: load SDL from `docs/contracts/schema.graphql`. TypeScript (brief mandate).
-- **Why:** Collinson’s backend already uses NestJS — matching their production structure (modules, DI, providers) makes the submission reviewable in their idiom and treats the exercise like a production app. Nest does **not** replace the scale design; it hosts the same stateless API + worker seams. GraphQL remains the brief-mandated API style; Apollo is the GraphQL engine under Nest.
-- **Rejected:** Standalone Apollo Server without Nest (fine for a minimal demo, weaker company fit); REST wrapper “plus GraphQL later”; gRPC (out of brief).
+- **Why:** NestJS gives modular structure, DI, and providers suited to a production-shaped TypeScript service. Nest does **not** replace the scale design; it hosts the same stateless API + worker seams. GraphQL remains the brief-mandated API style; Apollo is the GraphQL engine under Nest.
+- **Rejected:** Standalone Apollo Server without Nest (weaker module/DI structure for this size); REST wrapper “plus GraphQL later”; gRPC (out of brief).
 - **Scale note:** Target planning envelope ~**10M requests/day** (~100–250 avg QPS, ~1k peak with burst) still means **horizontal Nest API replicas + Postgres**, not microservices. Nest modules ≠ distributed services.
 - **Worker:** Separate Nest application context / entrypoint (`worker.ts`) with schedule or interval provider — same Docker image, different command — so refresh stays decoupled from request threads.
 
-### ADR-005 — In-process cache now; Redis later
+### ADR-005a — In-process forecast cache
 
 - **Decision:** Short-TTL in-memory cache for hot locations on each API instance (`FORECAST_CACHE_TTL_MS`, default 60s). **Status: implemented.**
-- **Why:** Hot set ~500 KB (`01`); 6h data change rate; single/few replicas make shared cache optional.
-- **Rejected:** Redis in v1 (ops cost without proven need).
-- **Scale trigger:** Shared Redis when replica count causes stampede or uneven hit rates.
+- **Why:** Hot set ~500 KB (`01`); 6h data change rate; single/few replicas make a shared forecast cache optional.
+- **Rejected:** Shared Redis/Memcached for forecast payloads in v1 (ops cost without proven stampede).
+- **Scale trigger:** Shared forecast cache when replica count causes stampede or uneven hit rates.
+
+### ADR-005b — Redis for shared rate-limit storage
+
+- **Decision:** Nest throttler uses Redis when `REDIS_URL` is set; **required when `NODE_ENV=production`**. Compose ships a `redis` service for local demo. **Status: implemented.**
+- **Why:** Stateless API replicas need a shared limit store so clients cannot bypass throttling by hitting different instances; fail-closed on Redis errors.
+- **Rejected:** In-process-only throttling for production (broken under horizontal scale).
+- **Note:** This Redis role is **rate limiting only**, not the forecast cache (ADR-005a).
 
 ### ADR-006 — Refresh scheduling in-worker
 

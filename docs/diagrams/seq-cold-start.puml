@@ -7,7 +7,7 @@ participant "GraphQL\nAPI" as GQL
 participant "Geocoding" as Geo
 participant "Store" as Store
 participant "Open-Meteo\nclient" as OMClient
-cloud "Open-Meteo" as OM
+participant "Open-Meteo" as OM
 participant "Scorer" as Score
 database "Postgres" as PG
 

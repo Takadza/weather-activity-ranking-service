@@ -8,7 +8,7 @@ export type ForecastCacheEntry = {
 };
 
 /**
- * Process-local TTL + LRU cache for warm forecast reads (ADR-005).
+ * Process-local TTL + LRU cache for warm forecast reads (ADR-005a).
  */
 export class ForecastCache {
   private readonly entries = new Map<string, ForecastCacheEntry>();

@@ -1,43 +1,27 @@
 @startuml 02-deployment
+' Presentation artifact: docs/diagrams/02-deployment.svg (hand-authored for GitHub).
 !theme plain
+skinparam linetype ortho
+left to right direction
 title Deployment — v1 ship vs horizontal scale posture
 
 actor Client
-
-node "Edge (scale add-on)" {
-  component "Load Balancer\n(L4/L7 — cloud LB / nginx / Traefik)\n*not provisioned in v1 take-home*" as LB
+rectangle "Edge (optional)" {
+  component "Load Balancer" as LB
 }
-
-node "Application (same Docker image)" {
-  component "API replica 1\nGraphQL + health" as API1
-  component "API replica N\n(scale out)" as APIN
-  component "Refresh worker ×1\n(schedule-driven)" as Worker
+rectangle "Application" {
+  component "API replica(s)" as API
+  component "Refresh worker ×1" as Worker
 }
-
-database "PostgreSQL\n(primary)" as PG
-
+database "PostgreSQL" as PG
+database "Redis" as RD
 cloud "Open-Meteo" as OM
 
 Client --> LB
-LB --> API1
-LB --> APIN
-API1 --> PG
-APIN --> PG
+LB --> API
+API --> PG
+API --> RD
 Worker --> PG
 Worker --> OM
-API1 ..> OM : cold-start only
-APIN ..> OM : cold-start only
-
-note bottom of LB
-  v1 local/demo: single API container,
-  no LB. App stays **stateless** so an LB
-  can be added with zero redesign.
-end note
-
-note bottom of Worker
-  Keep worker count at 1 until scale
-  ladder says otherwise (advisory lock
-  / queue if multi-worker needed).
-end note
 
 @enduml

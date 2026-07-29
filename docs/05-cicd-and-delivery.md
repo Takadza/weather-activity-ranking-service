@@ -2,7 +2,7 @@
 
 **Stage 2 of 5 (Design) — how we build, test, and run the service**
 
-Pipeline shape is fixed here; YAML/Docker files are implemented in the Code stage.
+Pipeline and Docker files are implemented; see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`Dockerfile`](../Dockerfile), and [`docker-compose.yml`](../docker-compose.yml).
 
 Depends on: [`02-system-design.md`](02-system-design.md).
 
@@ -10,14 +10,14 @@ Depends on: [`02-system-design.md`](02-system-design.md).
 
 ## 1. Goals
 
-- Every push/PR proves **TypeScript compiles**, **lint** (when configured), and **tests** pass
-- Local run matches container shape (Compose + Postgres)
-- No secrets in git; public repo safe for interview review
-- CD to a cloud host is **optional**; CI is **required** for a senior-looking submission
+- Every push/PR proves **TypeScript compiles**, **lint**, and **tests** pass
+- Local run matches container shape (Compose + Postgres + Redis)
+- No secrets in git; safe for a public repository
+- CD to a cloud host is **optional**; CI is **required**
 
 ---
 
-## 2. Repository layout (target)
+## 2. Repository layout
 
 ```
 .github/workflows/ci.yml
@@ -27,65 +27,42 @@ docker-compose.yml
 package.json
 nest-cli.json
 prisma/
-src/          # NestJS modules (see TDD plan)
+src/          # NestJS modules (see 06-implementation-notes.md)
 docs/
 ```
 
-Exact Nest module tree is in the TDD plan; keep modules aligned with `02` (`Graphql`, `Scoring`, `Store`, `Refresh`, `OpenMeteo`, `Geocoding`, `Health`).
+Nest modules align with `02` (`Graphql`, `Scoring`, `Store`, `Refresh`, `OpenMeteo`, `Geocoding`, `Health`).
 
 ---
 
-## 3. GitHub Actions CI (phased)
+## 3. GitHub Actions CI (implemented)
 
-Implement CI **early in Code**, not only at the end (see TDD plan Tasks **2b** and **3**).
+Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — triggers on push to `main`/`develop` and pull requests.
 
-**Phase A — Task 2b (unit gate, no DB):**
+**Job `unit`:**
 
 | Step | Command / action |
 |---|---|
-| Checkout | `actions/checkout` |
-| Node | `actions/setup-node` — LTS 22.x, `cache: npm` |
+| Checkout | `actions/checkout@v5` |
+| Node | `actions/setup-node@v5` — Node 22, `cache: npm` |
 | Install | `npm ci` |
-| Audit | `npm audit --omit=dev --audit-level=high` (`ws` pinned via `overrides` to clear Nest GraphQL transitive advisory) |
+| Audit | `npm audit --omit=dev --audit-level=high` (`ws` pinned via `overrides`) |
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
-| Unit tests | `npm test` (must run **without** Postgres) |
+| Unit tests | `npm test` (no Postgres) |
 | Build | `npm run build` |
 
-**Phase B — Task 3 (integration job):**
+**Job `integration` (needs `unit`):**
 
 - Service container: `postgres:16-alpine` with health check
 - `npx prisma migrate deploy`
+- Schema drift check via `prisma migrate diff --exit-code`
 - `npm run test:integration`
+- `npm run test:e2e`
 
-**Phase C — Task 9 (optional):**
+**Job `docker` (needs `unit`):**
 
-- `docker build` for the Nest API image
-- Compose services `api` + `worker` for local full stack (Compose `db` already from Task 3)
-
-### Example workflow skeleton (Phase A — add in Task 2b)
-
-```yaml
-name: ci
-on:
-  push:
-    branches: [main]
-  pull_request:
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
-```
+- `docker build .` for the Nest image
 
 ---
 
@@ -94,10 +71,10 @@ jobs:
 ### 4.1 Multi-stage Dockerfile
 
 1. **deps** — `npm ci`
-2. **build** — `prisma generate`, `tsc` / build
-3. **runtime** — production `node`, non-root user, `node dist/main.js` (API)  
+2. **build** — `prisma generate`, Nest build
+3. **runtime** — production `node`, non-root user, `node dist/main` (API)
 
-Worker: same image, command override e.g. `node dist/worker.js`.
+Worker: same image, command override e.g. `node dist/worker`.
 
 ### 4.2 `docker-compose.yml` (local / demo)
 
@@ -149,11 +126,11 @@ Commit `.env.example` only (`.gitignore` ignores `.env.*` except `.env.example`)
 
 ---
 
-## 7. README obligations (Code/Review stage)
+## 7. README obligations
 
 - How to run: `docker compose up` (or npm + local Postgres)
-- One copy-paste GraphQL query (from `03`)
-- Assumptions + link to `docs/01`–`05`
+- One copy-paste GraphQL query
+- Assumptions + link to `docs/01`–`06`
 - Deliberate cuts (from `04`)
 - Note: TypeScript, GraphQL, persisted Open-Meteo data
 
@@ -169,8 +146,8 @@ Design packet:
 4. [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md)
 5. This document
 
-**TDD plan (done):** [`superpowers/plans/2026-07-28-weather-activity-ranking.md`](superpowers/plans/2026-07-28-weather-activity-ranking.md)
+**Implementation notes (done):** [`06-implementation-notes.md`](06-implementation-notes.md)
 
-**Next stage:** Code — execute the TDD plan (scorer → store → refresh → GraphQL → Docker/GHA) → Review.
+**Next:** none — Code and Review complete.
 
 Doc index: [`README.md`](README.md) · Root: [`../README.md`](../README.md).

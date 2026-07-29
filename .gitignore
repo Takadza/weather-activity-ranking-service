@@ -27,6 +27,7 @@ coverage/
 .DS_Store
 .idea/
 *.swp
+.cursor/
 
 # Misc
 *.pem
