@@ -1,11 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Server } from 'node:http';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { OpenMeteoClient } from '../src/open-meteo/client';
 
 describe('App e2e smoke (mocked provider)', () => {
-  let app: INestApplication;
+  let app: INestApplication<Server>;
 
   beforeAll(async () => {
     process.env.DATABASE_URL ??=

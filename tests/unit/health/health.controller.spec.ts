@@ -1,11 +1,12 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Server } from 'node:http';
 import request from 'supertest';
 import { HealthController } from '../../../src/health/health.controller';
 import { HealthService } from '../../../src/health/health.service';
 
 describe('HealthController', () => {
-  let app: INestApplication;
+  let app: INestApplication<Server>;
   let getHealth: jest.Mock;
 
   beforeEach(async () => {

@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { Server } from 'node:http';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { OpenMeteoClient } from '../../src/open-meteo/client';
@@ -19,12 +20,44 @@ const COLD_LON = -72.222222;
 const FAIL_LAT = 43.333333;
 const FAIL_LON = -73.333333;
 const WARM_LAT_R = roundCoordinate(WARM_LAT);
-const WARM_LON_R = roundCoordinate(WARM_LON);
 const COLD_LAT_R = roundCoordinate(COLD_LAT);
-const COLD_LON_R = roundCoordinate(COLD_LON);
 const FAIL_LAT_R = roundCoordinate(FAIL_LAT);
-const FAIL_LON_R = roundCoordinate(FAIL_LON);
 const TEST_LATS = [WARM_LAT_R, COLD_LAT_R, FAIL_LAT_R];
+
+type GraphqlBody<T> = {
+  errors?: unknown;
+  data?: T | null;
+};
+
+type GraphqlError = {
+  extensions?: { code?: string };
+};
+
+type ActivityRankingData = {
+  activityRanking: {
+    location: {
+      id: string;
+      name: string;
+      latitude: number;
+      longitude: number;
+    };
+    alternatives: { id: string }[];
+    rankings: unknown[];
+    rubricVersion: string;
+    lastUpdated: string;
+    dataAgeSeconds: number;
+    stale: boolean;
+  };
+};
+
+function expectGraphqlErrorCode(
+  body: GraphqlBody<ActivityRankingData>,
+  code: string,
+): void {
+  expect(body.data).toBeNull();
+  const errors = body.errors as GraphqlError[] | undefined;
+  expect(errors?.map((error) => error.extensions?.code)).toContain(code);
+}
 
 function weatherDay(date: string, tempMaxC: number): WeatherDay {
   return {
@@ -68,7 +101,7 @@ const RANKING_QUERY = `
 `;
 
 describe('GraphQL activityRanking', () => {
-  let app: INestApplication;
+  let app: INestApplication<Server>;
   let prisma: PrismaService;
   let locations: LocationsRepository;
   let forecasts: ForecastsRepository;
@@ -157,14 +190,16 @@ describe('GraphQL activityRanking', () => {
       })
       .expect(200);
 
-    expect(res.body.errors).toBeUndefined();
-    const payload = res.body.data.activityRanking;
-    expect(payload.rankings).toHaveLength(4);
-    expect(payload.rubricVersion).toBe('2026-07-28.1');
-    expect(payload.lastUpdated).toBeTruthy();
-    expect(typeof payload.dataAgeSeconds).toBe('number');
-    expect(typeof payload.stale).toBe('boolean');
-    expect(payload.location.latitude).toBe(roundCoordinate(WARM_LAT));
+    const body = res.body as GraphqlBody<ActivityRankingData>;
+    expect(body.errors).toBeUndefined();
+    const payload = body.data?.activityRanking;
+    expect(payload).toBeDefined();
+    expect(payload!.rankings).toHaveLength(4);
+    expect(payload!.rubricVersion).toBe('2026-07-28.1');
+    expect(payload!.lastUpdated).toBeTruthy();
+    expect(typeof payload!.dataAgeSeconds).toBe('number');
+    expect(typeof payload!.stale).toBe('boolean');
+    expect(payload!.location.latitude).toBe(roundCoordinate(WARM_LAT));
     expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
     expect(openMeteo.geocode).not.toHaveBeenCalled();
   });
@@ -182,18 +217,23 @@ describe('GraphQL activityRanking', () => {
       })
       .expect(200);
 
-    expect(res.body.errors).toBeUndefined();
-    const payload = res.body.data.activityRanking;
-    expect(payload.rankings).toHaveLength(4);
-    expect(payload.rubricVersion).toBe('2026-07-28.1');
+    const body = res.body as GraphqlBody<ActivityRankingData>;
+    expect(body.errors).toBeUndefined();
+    const payload = body.data?.activityRanking;
+    expect(payload).toBeDefined();
+    expect(payload!.rankings).toHaveLength(4);
+    expect(payload!.rubricVersion).toBe('2026-07-28.1');
     expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
-    expect(openMeteo.fetchForecast).toHaveBeenCalledWith(
-      roundCoordinate(COLD_LAT),
-      roundCoordinate(COLD_LON),
-      expect.objectContaining({ signal: expect.any(AbortSignal) }),
-    );
+    const fetchCall = openMeteo.fetchForecast.mock.calls[0] as [
+      number,
+      number,
+      { signal: AbortSignal },
+    ];
+    expect(fetchCall[0]).toBe(roundCoordinate(COLD_LAT));
+    expect(fetchCall[1]).toBe(roundCoordinate(COLD_LON));
+    expect(fetchCall[2].signal).toBeInstanceOf(AbortSignal);
 
-    const stored = await forecasts.getForecastDays(payload.location.id);
+    const stored = await forecasts.getForecastDays(payload!.location.id);
     expect(stored).toHaveLength(7);
   });
 
@@ -210,16 +250,8 @@ describe('GraphQL activityRanking', () => {
       })
       .expect(200);
 
-    expect(res.body.data).toBeNull();
-    expect(res.body.errors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          extensions: expect.objectContaining({
-            code: 'PROVIDER_UNAVAILABLE',
-          }),
-        }),
-      ]),
-    );
+    const body = res.body as GraphqlBody<ActivityRankingData>;
+    expectGraphqlErrorCode(body, 'PROVIDER_UNAVAILABLE');
     expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
   });
 
@@ -236,16 +268,8 @@ describe('GraphQL activityRanking', () => {
       })
       .expect(200);
 
-    expect(res.body.data).toBeNull();
-    expect(res.body.errors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          extensions: expect.objectContaining({
-            code: 'PROVIDER_UNAVAILABLE',
-          }),
-        }),
-      ]),
-    );
+    const body = res.body as GraphqlBody<ActivityRankingData>;
+    expectGraphqlErrorCode(body, 'PROVIDER_UNAVAILABLE');
     expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
   });
 
@@ -258,16 +282,8 @@ describe('GraphQL activityRanking', () => {
       })
       .expect(200);
 
-    expect(res.body.data).toBeNull();
-    expect(res.body.errors).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          extensions: expect.objectContaining({
-            code: 'BAD_USER_INPUT',
-          }),
-        }),
-      ]),
-    );
+    const body = res.body as GraphqlBody<ActivityRankingData>;
+    expectGraphqlErrorCode(body, 'BAD_USER_INPUT');
     expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
     expect(openMeteo.geocode).not.toHaveBeenCalled();
   });
