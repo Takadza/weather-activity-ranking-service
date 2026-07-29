@@ -1,0 +1,28 @@
+@startuml 03-modules
+' Presentation artifact: docs/diagrams/03-modules.svg (hand-authored for GitHub).
+!theme plain
+skinparam linetype ortho
+top to bottom direction
+title Modular monolith — internal modules
+
+rectangle "Activity Ranking Service" {
+  component "graphql" as GQL
+  component "activity-ranking" as Rank
+  component "scoring" as Score
+  component "geocoding" as Geo
+  component "refresh" as Refresh
+  component "store" as Store
+  component "open-meteo" as OMClient
+}
+
+database "PostgreSQL" as PG
+cloud "Open-Meteo" as OM
+
+GQL --> Rank
+Rank --> Score
+Rank --> Geo
+Rank --> Refresh
+Store --> PG
+OMClient --> OM
+
+@enduml

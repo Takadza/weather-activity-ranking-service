@@ -1,0 +1,27 @@
+@startuml 02-deployment
+' Presentation artifact: docs/diagrams/02-deployment.svg (hand-authored for GitHub).
+!theme plain
+skinparam linetype ortho
+left to right direction
+title Deployment — v1 ship vs horizontal scale posture
+
+actor Client
+rectangle "Edge (optional)" {
+  component "Load Balancer" as LB
+}
+rectangle "Application" {
+  component "API replica(s)" as API
+  component "Refresh worker ×1" as Worker
+}
+database "PostgreSQL" as PG
+database "Redis" as RD
+cloud "Open-Meteo" as OM
+
+Client --> LB
+LB --> API
+API --> PG
+API --> RD
+Worker --> PG
+Worker --> OM
+
+@enduml

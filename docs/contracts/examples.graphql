@@ -1,0 +1,62 @@
+# Example GraphQL operations — Weather Activity Ranking Service
+# POST /graphql with JSON body: { "query": "...", "variables": { ... } }
+#
+# Auth (required in production / Compose):
+#   X-API-Key: local-compose-api-key
+#   or Authorization: Bearer <API_KEY>
+#
+# Postman collection (more cities, coords, negative cases):
+#   ../../postman/weather-activity-ranking.postman_collection.json
+
+query RankByName($location: LocationInput!) {
+  activityRanking(location: $location) {
+    location {
+      id
+      name
+      country
+      admin1
+      latitude
+      longitude
+    }
+    alternatives {
+      name
+      country
+      admin1
+      latitude
+      longitude
+    }
+    rubricVersion
+    lastUpdated
+    dataAgeSeconds
+    stale
+    rankings {
+      activity
+      overallScore
+      rank
+      days {
+        date
+        score
+        available
+        reasonCodes
+      }
+    }
+  }
+}
+
+# Variables (by name):
+# { "location": { "name": "Cape Town" } }
+#
+# Variables (by coordinates — coordinates win if both set):
+# { "location": { "latitude": -33.9249, "longitude": 18.4241 } }
+
+query HealthCheck {
+  health {
+    status
+    refresh {
+      lastSuccessAt
+      lastAttemptAt
+      lastError
+      trackedLocationCount
+    }
+  }
+}

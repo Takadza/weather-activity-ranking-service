@@ -1,0 +1,103 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wars
+      POSTGRES_PASSWORD: wars
+      POSTGRES_DB: wars
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wars -d wars"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - wars_pg:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    ports:
+      - "3000:3000"
+    environment: &app_env
+      DATABASE_URL: postgresql://wars:wars@db:5432/wars?schema=public
+      PORT: "3000"
+      WORKER_METRICS_PORT: "3001"
+      WORKER_BIND_HOST: "0.0.0.0"
+      REFRESH_INTERVAL_MS: "21600000"
+      REFRESH_CONCURRENCY: "5"
+      OPEN_METEO_TIMEOUT_MS: "5000"
+      COLD_START_TIMEOUT_MS: "3000"
+      COLD_START_MAX_CONCURRENT: "10"
+      STALE_AFTER_SECONDS: "21600"
+      GEOCODE_CACHE_TTL_SECONDS: "604800"
+      FORECAST_CACHE_TTL_MS: "60000"
+      FORECAST_CACHE_MAX_ENTRIES: "256"
+      MAX_TRACKED_LOCATIONS: "100"
+      LOG_LEVEL: info
+      NODE_ENV: production
+      ALLOWED_ORIGINS: ""
+      API_KEY: "local-compose-api-key"
+      METRICS_TOKEN: "local-compose-metrics-token"
+      REDIS_URL: redis://redis:6379
+      THROTTLE_TTL_MS: "60000"
+      THROTTLE_LIMIT: "60"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  worker:
+    build: .
+    ports:
+      - "127.0.0.1:3001:3001"
+    environment:
+      <<: *app_env
+      # Inside Compose, healthchecks hit the container loopback; bind all interfaces in-container.
+      WORKER_BIND_HOST: "0.0.0.0"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Migrate is idempotent; avoids racing schema before API finishes deploy.
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/worker.js"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+volumes:
+  wars_pg:

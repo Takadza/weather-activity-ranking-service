@@ -1,0 +1,37 @@
+@startuml seq-refresh
+!theme plain
+title Sequence — Scheduled background refresh (FR-O1)
+
+participant "Refresh\nworker" as Worker
+participant "Store" as Store
+participant "Open-Meteo\nclient" as OMClient
+participant "Open-Meteo" as OM
+participant "Scorer" as Score
+database "Postgres" as PG
+
+loop every REFRESH_INTERVAL_MS (default 6h)
+  Worker -> Store : listTrackedLocations()
+  Store -> PG : SELECT locations
+  PG --> Store : location list
+  Store --> Worker : locations[]
+
+  loop for each location (bounded concurrency)
+    Worker -> OMClient : fetchForecast(lat, lon)
+    OMClient -> OM : GET forecast\n(retry + backoff)
+    alt success
+      OM --> OMClient : payload
+      OMClient --> Worker : raw forecast
+      Worker -> Store : upsertForecastDays(...)
+      Store -> PG : UPSERT (location_id, forecast_date)
+      Worker -> Score : scoreAll (compute-on-read;\nno persist in v1)
+      Worker -> Store : recordRefreshSuccess(now)
+    else failure / circuit open
+      OM --> OMClient : error / timeout
+      OMClient --> Worker : failure
+      Worker -> Store : recordRefreshFailure(location, err)
+      note right: Do not delete last-known-good rows
+    end
+  end
+end
+
+@enduml

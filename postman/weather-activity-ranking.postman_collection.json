@@ -1,0 +1,721 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Weather Activity Ranking Service",
+    "description": "Local Compose stack (api on :3000).\n\n## Setup\n1. `docker compose up --build -d`\n2. Import this collection into Postman\n3. Collection variables (defaults match Compose):\n   - `apiKey` = `local-compose-api-key`\n   - `metricsToken` = `local-compose-metrics-token`\n\n## Auth\nCollection auth sends `X-API-Key: {{apiKey}}` on every request unless a folder/request overrides it.\n`/health/live` and negative auth tests use no auth.\n`/metrics` uses `X-Metrics-Token` (not the API key).\n\nYou can also use `Authorization: Bearer {{apiKey}}` instead of `X-API-Key`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      { "key": "key", "value": "X-API-Key", "type": "string" },
+      { "key": "value", "value": "{{apiKey}}", "type": "string" },
+      { "key": "in", "value": "header", "type": "string" }
+    ]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "workerUrl", "value": "http://127.0.0.1:3001" },
+    { "key": "apiKey", "value": "local-compose-api-key" },
+    { "key": "metricsToken", "value": "local-compose-metrics-token" }
+  ],
+  "item": [
+    {
+      "name": "0. Auth checks",
+      "item": [
+        {
+          "name": "GraphQL health — missing API key (expect UNAUTHENTICATED)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query { health { status } }\n",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Must fail without API key after OWASP hardening."
+          },
+          "response": []
+        },
+        {
+          "name": "GraphQL health — wrong API key (expect UNAUTHENTICATED)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-API-Key", "value": "wrong-key" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query { health { status } }\n",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GraphQL health — Bearer API key",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{apiKey}}" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query { health { status refresh { trackedLocationCount } } }\n",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Alternate auth form: Authorization Bearer {{apiKey}}."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health — missing API key (expect 401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1. Health & readiness",
+      "item": [
+        {
+          "name": "GET /health/live (public)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Public liveness — no API key required."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health/ready",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/ready",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "ready"]
+            },
+            "description": "Requires API key. 503 when degraded."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health (redacted lastError)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "API key only — lastError should be null unless metrics token is also sent."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health (detailed with metrics token)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Metrics-Token", "value": "{{metricsToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "API key (collection) + metrics token for lastError detail."
+          },
+          "response": []
+        },
+        {
+          "name": "GraphQL health",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query HealthCheck {\n  health {\n    status\n    refresh {\n      lastSuccessAt\n      lastAttemptAt\n      lastError\n      trackedLocationCount\n    }\n  }\n}\n",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Worker GET /health/live",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{workerUrl}}/health/live",
+              "host": ["{{workerUrl}}"],
+              "path": ["health", "live"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Rank by city name",
+      "item": [
+        {
+          "name": "Cape Town (surf / outdoor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { id name country admin1 latitude longitude }\n    alternatives { name country admin1 latitude longitude }\n    rubricVersion lastUpdated dataAgeSeconds stale\n    rankings {\n      activity overallScore rank\n      days { date score available reasonCodes }\n    }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Cape Town\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Zurich (skiing candidate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country admin1 latitude longitude }\n    alternatives { name country admin1 }\n    stale lastUpdated dataAgeSeconds\n    rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Zurich\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tokyo",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country admin1 latitude longitude }\n    alternatives { name country admin1 }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Tokyo\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reykjavik",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country latitude longitude }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Reykjavik\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Dubai",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country latitude longitude }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Dubai\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Sydney",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country latitude longitude }\n    alternatives { name country }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Sydney\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Vancouver",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country admin1 latitude longitude }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Vancouver\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ambiguous — Springfield (expect alternatives)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankAmbiguous($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country admin1 latitude longitude }\n    alternatives { name country admin1 latitude longitude }\n    rankings { activity overallScore rank }\n    stale\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Springfield\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Expect alternatives[] for ambiguous geocode names."
+          },
+          "response": []
+        },
+        {
+          "name": "Ambiguous — Paris (expect alternatives)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankAmbiguous($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name country admin1 latitude longitude }\n    alternatives { name country admin1 latitude longitude }\n    rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Paris\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Rank by coordinates",
+      "item": [
+        {
+          "name": "Cape Town coords (no auto-track)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { id name country latitude longitude }\n    alternatives { name country }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": -33.9249,\n    \"longitude\": 18.4241\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Coordinate-only lookups do not promote tracked locations."
+          },
+          "response": []
+        },
+        {
+          "name": "Chamonix Alps coords (ski)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name latitude longitude }\n    stale rankings { activity overallScore rank days { date score available reasonCodes } }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": 45.9237,\n    \"longitude\": 6.8694\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Honolulu coords (surf)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name latitude longitude }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": 21.3069,\n    \"longitude\": -157.8583\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "London coords",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name latitude longitude }\n    stale rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": 51.5074,\n    \"longitude\": -0.1278\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Name + coords (coords win)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankMixed($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name latitude longitude }\n    alternatives { name }\n    rankings { activity overallScore rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"name\": \"Paris\",\n    \"latitude\": -33.9249,\n    \"longitude\": 18.4241\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "When both name and coordinates are set, coordinates win (Cape Town coords, not Paris)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Validation / bad input",
+      "item": [
+        {
+          "name": "Blank name (BAD_USER_INPUT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name }\n    rankings { activity rank }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"   \" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Name longer than 100 chars (BAD_USER_INPUT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"name\": \"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "101 x characters — must be rejected."
+          },
+          "response": []
+        },
+        {
+          "name": "Latitude out of range (BAD_USER_INPUT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": 91,\n    \"longitude\": 0\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Partial coordinates without name (BAD_USER_INPUT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": 10\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Unknown city name (BAD_USER_INPUT or empty geocode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location { name }\n    rankings { activity }\n  }\n}\n",
+                "variables": "{\n  \"location\": { \"name\": \"Zzqxneveracity999\" }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Metrics",
+      "item": [
+        {
+          "name": "GET /metrics — missing token (expect 401)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["metrics"]
+            },
+            "description": "Metrics uses METRICS_TOKEN, not API_KEY."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /metrics — X-Metrics-Token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              { "key": "X-Metrics-Token", "value": "{{metricsToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["metrics"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET /metrics — Bearer metrics token",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{metricsToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["metrics"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Worker GET /metrics",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [
+              { "key": "X-Metrics-Token", "value": "{{metricsToken}}" }
+            ],
+            "url": {
+              "raw": "{{workerUrl}}/metrics",
+              "host": ["{{workerUrl}}"],
+              "path": ["metrics"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

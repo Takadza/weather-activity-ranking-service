@@ -1,0 +1,40 @@
+@startuml seq-cold-start
+!theme plain
+title Sequence — Cold-start location (FR-U4)
+
+actor Client
+participant "GraphQL\nAPI" as GQL
+participant "Geocoding" as Geo
+participant "Store" as Store
+participant "Open-Meteo\nclient" as OMClient
+participant "Open-Meteo" as OM
+participant "Scorer" as Score
+database "Postgres" as PG
+
+Client -> GQL : query activityRanking(name)
+GQL -> Geo : resolve(name)
+Geo -> Store : geocode cache lookup
+Store -> PG : SELECT geocode_cache
+PG --> Store : miss
+Geo -> OMClient : geocode(name)
+OMClient -> OM : GET geocoding
+OM --> OMClient : candidates
+OMClient --> Geo : best + alternatives
+Geo -> Store : upsert geocode + location
+Store -> PG : UPSERT
+
+GQL -> Store : getForecastDays(locationId)
+Store -> PG : SELECT
+PG --> Store : miss (no forecast yet)
+
+GQL -> OMClient : fetchForecast(lat, lon)\n[timeout budget < 3s]
+OMClient -> OM : GET forecast
+OM --> OMClient : 7-day payload
+OMClient --> GQL : raw forecast
+GQL -> Store : upsertForecastDays
+Store -> PG : UPSERT (location_id, forecast_date)
+GQL -> Score : scoreAll(...)
+Score --> GQL : rankings
+GQL --> Client : rankings + freshness\n(+ alternatives if ambiguous)
+
+@enduml

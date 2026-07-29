@@ -1,8 +1,8 @@
 # Weather Activity Ranking Service — Requirements & Estimation
 
-**Stage 1 of 5: Clarify → Design → TDD → Code → Review**
+**Stage 1 of 5: Clarify → Design → Implementation notes → Code → Review**
 
-Constraints, clarifying assumptions, functional & non-functional requirements, and back-of-the-envelope calculations. Data model, GraphQL schema, refresh architecture, and the scoring rubric are deferred to `02 - System Design`.
+Constraints, clarifying assumptions, functional & non-functional requirements, and back-of-the-envelope calculations. Architecture, API contracts, ops, and CI/CD are covered in `02`–`05` (Design stage).
 
 ---
 
@@ -10,19 +10,21 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 
 **From the brief**
 
-- **Language/runtime:** Node.js
+- **Language/runtime:** Node.js with **TypeScript** (assessment requirement)
 - **API:** GraphQL (not REST / gRPC)
 - **Weather source:** Open-Meteo (free public API; rate limits; no SLA)
 - **Persistence is mandatory:** serve weather from storage, not from Open-Meteo on every request
 - **Backend only:** no front end
 - **AI-assisted development is expected** — document decisions inline as they are made
-- **Storage technology unconstrained** — choose in System Design once workload shape is known
+- **Storage technology unconstrained** — chosen in System Design (`02`) once workload shape is known
+- **Submission:** public GitHub repo; show reasoning (docs/commits), not a polished write-up alone
 
 **Inferred**
 
 - Deliverable is a public repo + README for engineer review (run instructions and deliberate cuts matter)
 - “Production judgement” without over-building: graceful degradation, idempotency, observability — sized to this workload
 - Time-boxed: interesting trade-offs beat exhaustive feature coverage
+- Design for horizontal scale of a stateless API; ship a focused single-instance stack that stays compatible with replicas behind a load balancer
 
 **Out of scope:** user accounts/auth, historical/past-date weather, push notifications, admin UI for tracked locations
 
@@ -32,9 +34,9 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 
 | # | Question | Assumption | Why (one line) |
 |---|---|---|---|
-| Q1 | What does “how good” mean per activity? | Define an explicit, versioned scoring rubric (thresholds on temp, precip, wind, snowfall, waves, etc.) | Untestable heuristics are the biggest review risk; rubric lives in `02`, not inline conditionals |
+| Q1 | What does “how good” mean per activity? | Define an explicit, versioned scoring rubric (thresholds on temp, precip, wind, snowfall, waves, etc.) | Untestable heuristics are the biggest review risk; rubric lives in `03`, not inline conditionals |
 | Q2 | Ambiguous / unresolvable location names? | Best geocoding match **plus** alternative candidates | Surfacing ambiguity beats a silent wrong guess; client can disambiguate later |
-| Q3 | How fresh must data be? | Default **6-hour** refresh; expose `lastUpdated` / `dataAge` on every response | 7-day forecasts don’t move faster; freshness observability matters more than the exact interval |
+| Q3 | How fresh must data be? | Default **6-hour** refresh; expose `lastUpdated` / `dataAgeSeconds` on every response | 7-day forecasts don’t move faster; freshness observability matters more than the exact interval |
 | Q4 | Can weather alone decide skiing suitability? | Scope = **weather suitability for skiing conditions**, not “has a ski resort” | Resort existence needs a geo-features dataset outside this stack; document the limitation in the README |
 
 ---
@@ -44,7 +46,7 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 ### 3.1 User-facing
 
 - **FR-U1:** Given city/town name or lat/lon, return a 7-day forecast-based ranking for skiing, surfing, outdoor sightseeing, and indoor sightseeing
-- **FR-U2:** Every response includes freshness (`lastUpdated` / `dataAge`)
+- **FR-U2:** Every response includes freshness (`lastUpdated` / `dataAgeSeconds` / `stale`)
 - **FR-U3:** Ambiguous location → best match + alternatives (Q2)
 - **FR-U4:** Cold-start location still returns a usable result (not a hard failure)
 
@@ -77,10 +79,10 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 | **Scalability** | Stateless read path → horizontal app scaling is a config change; refresh scales with location count, not user QPS |
 | **Extensibility** | New activity = new scoring function on existing persisted fields (no refresh/schema redesign) |
 | **Maintainability** | Scoring, refresh, and GraphQL resolvers are separable concerns |
-| **Testability** | Scoring is pure/deterministic — unit-testable without DB or HTTP (hard requirement for TDD stage) |
+| **Testability** | Scoring is pure/deterministic — unit-testable without DB or HTTP (hard requirement for the scoring module) |
 | **Cost** | Workload fits a small app + DB instance; main “cost” is Open-Meteo rate-limit citizenship |
 | **Observability** | Structured logs; metrics for refresh success/fail, Open-Meteo latency/errors, cache/DB hit ratio |
-| **Security** | No PII collected; validate location input (length, parameterised queries); no auth required for exercise, but resolvers structured so API key / rate-limit middleware can be added later |
+| **Security** | No PII collected; validate location input (length, parameterised queries); shared `API_KEY` on GraphQL/HTTP (except `/health/live`); `METRICS_TOKEN` for scrape/detail; Redis rate limits in production |
 
 ---
 
@@ -122,7 +124,7 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 - ~**1 KB** per location per day-record (7-day forecast fields + derived scores)
 - Steady-state current forecast: 5,000 × 7 ≈ **~35 MB**
 - **v1 decision:** keep **current forecast only** (matches FR-U1). Full history would be ~140 MB/day / ~51 GB/year — deliberately cut; no FR requires it.
-- Single DB instance is enough; **tech choice deferred to `02`** (volume alone doesn’t distinguish Postgres vs SQLite vs similar).
+- Single DB instance is enough; **tech choice locked in `02`** (Postgres — volume alone doesn’t force it; multi-replica API and upserts do).
 
 ### 5.5 Bandwidth
 
@@ -175,7 +177,7 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 
 | Risk | Mitigation |
 |---|---|
-| Open-Meteo down/slow | Serve last-known-good + staleness; circuit breaker on hot path |
+| Open-Meteo down/slow | Serve last-known-good + staleness; circuit breaker on provider client (cold-start/refresh) |
 | Open-Meteo rate limits | Configurable interval + concurrency (FR-O2); backoff (FR-O3) |
 | Partial / failed refresh | Idempotent upserts `(location, date)` (FR-S3) |
 | Ambiguous place names | Best match + alternatives (FR-U3) |
@@ -184,11 +186,11 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 
 ### Success criteria
 
-- [ ] Persisted reads **< 300ms p95**
-- [ ] Refresh completes on schedule and is idempotent under retry
-- [ ] Rankings match documented rubric (unit tests with known inputs)
-- [ ] Queries still succeed with staleness flag when Open-Meteo is unavailable
-- [ ] New activity = new scoring function only (no refresh/schema change)
+- [x] Persisted reads **< 300ms p95** (warm path is Postgres-only; design target)
+- [x] Refresh completes on schedule and is idempotent under retry
+- [x] Rankings match documented rubric (unit tests with known inputs)
+- [x] Queries still succeed with staleness flag when Open-Meteo is unavailable
+- [x] New activity = new scoring function only (no refresh/schema change)
 
 ---
 
@@ -199,4 +201,12 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 - Caching + background refresh are where reliability and latency wins live
 - DB tech can be chosen for schema fit and ops simplicity, not raw scale
 
-**Next:** `02 - System Design` — data model, GraphQL schema, refresh job architecture, and per-activity scoring rubric.
+**Next (Design stage):**
+
+1. [`02-system-design.md`](02-system-design.md) — HLD, PlantUML diagrams, scale ladder, technology ADRs
+2. [`03-api-and-domain-design.md`](03-api-and-domain-design.md) — GraphQL consumer contract, data model, scoring rubric
+3. [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md) — refresh, failure modes, observability, cuts
+4. [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md) — GitHub Actions CI/CD, Docker Compose
+5. [Implementation notes](06-implementation-notes.md) — Code + Review complete
+
+Doc index: [`README.md`](README.md).

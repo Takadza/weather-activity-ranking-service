@@ -1,0 +1,31 @@
+@startuml seq-provider-down
+!theme plain
+title Sequence — Provider down / degraded read (last-known-good)
+
+actor Client
+participant "GraphQL\nAPI" as GQL
+participant "Store" as Store
+participant "Open-Meteo\nclient" as OMClient
+database "Postgres" as PG
+
+Client -> GQL : query activityRanking(...)
+GQL -> Store : getForecastDays
+Store -> PG : SELECT
+PG --> Store : rows exist, last_fetched_at old
+Store --> GQL : features + age
+
+alt warm path (data present)
+  GQL --> Client : rankings, stale=true,\ndataAgeSeconds exceeds threshold\n(no Open-Meteo call)
+else cold-start AND circuit open / timeout
+  GQL -> OMClient : fetchForecast
+  OMClient --> GQL : fail (circuit open)
+  GQL --> Client : GraphQL error\n(no data to serve)
+end
+
+note over GQL, PG
+  Availability of **our** API must not
+  depend on Open-Meteo when we already
+  have persisted forecasts.
+end note
+
+@enduml

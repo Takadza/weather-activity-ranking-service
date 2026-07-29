@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+
+# Build
+/dist
+/build
+*.tsbuildinfo
+
+# Env
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+
+# Logs / coverage
+logs/
+*.log
+npm-debug.log*
+coverage/
+.nyc_output
+
+# Worktrees
+.worktrees/
+
+# IDE / OS
+.DS_Store
+.idea/
+*.swp
+.cursor/
+
+# Misc
+*.pem

@@ -1,0 +1,99 @@
+"""Weather Activity Ranking Service — GraphQL consumer contract.
+Source of truth for the consumer GraphQL API. See docs/contracts/README.md.
+"""
+
+scalar DateTime
+
+enum ActivityType {
+  SKIING
+  SURFING
+  OUTDOOR_SIGHTSEEING
+  INDOOR_SIGHTSEEING
+}
+
+enum ReasonCode {
+  MISSING_TEMP
+  TOO_WARM
+  TOO_COLD
+  NO_SNOW
+  HIGH_WIND
+  NO_MARINE_DATA
+  FLAT
+  TOO_BIG
+  TOO_HOT
+  HEAVY_RAIN
+  BAD_WEATHER
+  GOOD_OUTDOOR_WEATHER
+  POOR_OUTDOOR_WEATHER
+}
+
+input LocationInput {
+  """City or town name. If both name and coordinates are set, coordinates win."""
+  name: String
+  latitude: Float
+  longitude: Float
+}
+
+type Location {
+  id: ID!
+  name: String!
+  country: String
+  admin1: String
+  latitude: Float!
+  longitude: Float!
+}
+
+type DailyActivityScore {
+  """Forecast local date as YYYY-MM-DD."""
+  date: String!
+  """0–100; null if N/A for this activity/day."""
+  score: Float
+  available: Boolean!
+  reasonCodes: [ReasonCode!]!
+}
+
+type ActivityRanking {
+  activity: ActivityType!
+  """Mean of available daily scores over the 7-day window; null if no days available."""
+  overallScore: Float
+  """1 = best among activities with scores; stable tie-break by ActivityType enum order."""
+  rank: Int!
+  days: [DailyActivityScore!]!
+}
+
+type ActivityRankingPayload {
+  location: Location!
+  """Other geocoding candidates when the name was ambiguous. Empty if lat/lon or unique match."""
+  alternatives: [Location!]!
+  rankings: [ActivityRanking!]!
+  rubricVersion: String!
+  lastUpdated: DateTime!
+  """Seconds since last successful forecast fetch for this location."""
+  dataAgeSeconds: Int!
+  """True when dataAgeSeconds exceeds staleness threshold (default: refresh interval)."""
+  stale: Boolean!
+}
+
+type RefreshStatus {
+  lastSuccessAt: DateTime
+  lastAttemptAt: DateTime
+  lastError: String
+  trackedLocationCount: Int!
+}
+
+type HealthPayload {
+  """ok | degraded"""
+  status: String!
+  refresh: RefreshStatus!
+}
+
+type Query {
+  """
+  Rank the next 7 days for skiing, surfing, outdoor sightseeing, and indoor sightseeing.
+  Warm path reads storage only; cold-start may fetch Open-Meteo within a timeout.
+  """
+  activityRanking(location: LocationInput!): ActivityRankingPayload!
+
+  """Optional GraphQL health; HTTP GET /health is the primary probe."""
+  health: HealthPayload!
+}
