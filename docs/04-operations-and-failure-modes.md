@@ -127,6 +127,7 @@ Scrape both processes in production.
 - Client rate limiting (see §4.4); `METRICS_TOKEN` for scrape endpoints and detailed health
 - Tracked locations: named geocode primary only, capped by `MAX_TRACKED_LOCATIONS` (coords never auto-track)
 - Secrets only via env (see `05`); never commit `.env` / `.env.production` (gitignore covers `.env.*` except `.env.example`)
+- Manual verification: Postman collection at [`../postman/weather-activity-ranking.postman_collection.json`](../postman/weather-activity-ranking.postman_collection.json) (API key + multi-city/coords/negative cases)
 
 ---
 

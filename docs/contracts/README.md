@@ -23,8 +23,21 @@ The brief requires **GraphQL** (not REST). There is no OpenAPI/Swagger spec.
 | [schema.graphql](schema.graphql) | Full GraphQL SDL |
 | [examples.graphql](examples.graphql) | Copy-paste operations + variable examples |
 | [prisma-schema.md](prisma-schema.md) | Database design (Prisma models) |
+| [../../postman/weather-activity-ranking.postman_collection.json](../../postman/weather-activity-ranking.postman_collection.json) | Postman collection (API key auth, many cities/coords, negative cases) |
 
 Narrative design, scoring rubric, and consumer rules: [../03-api-and-domain-design.md](../03-api-and-domain-design.md).
+
+### Postman
+
+Import the collection above. Defaults match Compose:
+
+| Variable | Default |
+|---|---|
+| `baseUrl` | `http://localhost:3000` |
+| `apiKey` | `local-compose-api-key` |
+| `metricsToken` | `local-compose-metrics-token` |
+
+Folders cover auth failures, health/ready, rank-by-name (multiple cities), rank-by-coordinates, validation errors, and metrics (API + worker).
 
 ## Freshness (required for clients)
 

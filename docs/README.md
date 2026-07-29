@@ -26,7 +26,9 @@ Clarify (01) → Design (02→05 + contracts + diagrams) → TDD plan → Code �
 | GraphQL API | [contracts/schema.graphql](contracts/schema.graphql) |
 | Example queries | [contracts/examples.graphql](contracts/examples.graphql) |
 | Database models | [contracts/prisma-schema.md](contracts/prisma-schema.md) |
-| Framework | NestJS (GraphQL Apollo driver) | [02 ADR-004](02-system-design.md) |
+| Manual API testing | [../postman/weather-activity-ranking.postman_collection.json](../postman/weather-activity-ranking.postman_collection.json) |
+| Auth | `API_KEY` (`X-API-Key` / Bearer); `METRICS_TOKEN` for `/metrics` + health detail |
+| Framework | NestJS (GraphQL Apollo driver) — [02 ADR-004](02-system-design.md) |
 | Refresh interval env | `REFRESH_INTERVAL_MS` (milliseconds), default `21600000` (6h) |
 
 ## Previous / Next

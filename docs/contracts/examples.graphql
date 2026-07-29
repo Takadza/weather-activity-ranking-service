@@ -1,5 +1,12 @@
 # Example GraphQL operations — Weather Activity Ranking Service
 # POST /graphql with JSON body: { "query": "...", "variables": { ... } }
+#
+# Auth (required in production / Compose):
+#   X-API-Key: local-compose-api-key
+#   or Authorization: Bearer <API_KEY>
+#
+# Postman collection (more cities, coords, negative cases):
+#   ../../postman/weather-activity-ranking.postman_collection.json
 
 query RankByName($location: LocationInput!) {
   activityRanking(location: $location) {

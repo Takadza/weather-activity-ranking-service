@@ -17,11 +17,13 @@ See [`contracts/README.md`](contracts/README.md) for the canonical consumer guid
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/graphql` | `POST` | Activity ranking queries (GraphQL) |
-| `/health` | `GET` | Liveness + last refresh success/age (FR-O4) |
+| `/health/live` | `GET` | Public liveness (no DB) |
+| `/health` / `/ready` | `GET` | Authenticated probes; readiness 503 when degraded |
 
 - **Content-Type:** `application/json` with GraphQL body `{ "query": "...", "variables": { ... } }`
-- **Auth (v1):** none. Resolvers/middleware structured so an API key or rate-limit layer can wrap the HTTP server later (`01` Security NFR)
-- **Playground:** Nest GraphQL playground / Apollo Sandbox in non-production for manual demos
+- **Auth (v1):** shared `API_KEY` via `X-API-Key` or `Authorization: Bearer`. Required when `NODE_ENV=production`. `/health/live` stays public; `/metrics` uses `METRICS_TOKEN` separately.
+- **Playground:** disabled; use Postman or curl for demos
+- **Postman:** [`../postman/weather-activity-ranking.postman_collection.json`](../postman/weather-activity-ranking.postman_collection.json) — cities, coords, auth/negative cases, health, metrics (Compose defaults: `local-compose-api-key` / `local-compose-metrics-token`)
 
 Consumers **must** handle freshness fields on every successful ranking payload: `lastUpdated`, `dataAgeSeconds`, `stale`.
 
@@ -41,6 +43,7 @@ Consumers **must** handle freshness fields on every successful ranking payload: 
 
 | Situation | Behaviour |
 |---|---|
+| Missing / wrong API key | HTTP 401 or GraphQL `UNAUTHENTICATED` |
 | Valid warm location | `200` + payload; `stale` false if within threshold |
 | Ambiguous name | `200` + `location` = best match + `alternatives` populated |
 | Empty / invalid input | GraphQL error (`BAD_USER_INPUT`) — e.g. missing both name and coordinates; name too long |

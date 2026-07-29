@@ -82,7 +82,7 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 | **Testability** | Scoring is pure/deterministic — unit-testable without DB or HTTP (hard requirement for TDD stage) |
 | **Cost** | Workload fits a small app + DB instance; main “cost” is Open-Meteo rate-limit citizenship |
 | **Observability** | Structured logs; metrics for refresh success/fail, Open-Meteo latency/errors, cache/DB hit ratio |
-| **Security** | No PII collected; validate location input (length, parameterised queries); no auth required for exercise, but resolvers structured so API key / rate-limit middleware can be added later |
+| **Security** | No PII collected; validate location input (length, parameterised queries); shared `API_KEY` on GraphQL/HTTP (except `/health/live`); `METRICS_TOKEN` for scrape/detail; Redis rate limits in production |
 
 ---
 
