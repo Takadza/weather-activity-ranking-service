@@ -15,6 +15,11 @@ export type HealthPayload = {
   refresh: HealthRefreshPayload;
 };
 
+export type GetHealthOptions = {
+  /** When false, lastError is always null (public probes). */
+  includeDetails?: boolean;
+};
+
 @Injectable()
 export class HealthService {
   constructor(
@@ -23,7 +28,8 @@ export class HealthService {
     private readonly config: ConfigService,
   ) {}
 
-  async getHealth(): Promise<HealthPayload> {
+  async getHealth(options: GetHealthOptions = {}): Promise<HealthPayload> {
+    const includeDetails = options.includeDetails === true;
     const [meta, trackedLocationCount] = await Promise.all([
       this.refreshMeta.getRefreshMeta(),
       this.locations.countTrackedLocations(),
@@ -56,7 +62,7 @@ export class HealthService {
       refresh: {
         lastSuccessAt,
         lastAttemptAt,
-        lastError: meta.lastError,
+        lastError: includeDetails ? meta.lastError : null,
         trackedLocationCount,
       },
     };

@@ -20,16 +20,18 @@ export class WorkerHttpServer implements OnModuleInit, OnApplicationShutdown {
 
   async onModuleInit(): Promise<void> {
     const metricsPort = this.config.get<number>('workerMetricsPort', 3001);
+    const bindHost = this.config.get<string>('workerBindHost', '127.0.0.1');
     const metricsToken = this.config.get<string>('metricsToken', '');
 
     this.server = createServer((req, res) => {
+      // Cleartext by design: bind loopback / private network and terminate TLS at the edge.
       this.handle(req, res, metricsToken);
     });
 
     await new Promise<void>((resolve, reject) => {
       const onError = (err: Error) => reject(err);
       this.server!.once('error', onError);
-      this.server!.listen(metricsPort, () => {
+      this.server!.listen(metricsPort, bindHost, () => {
         this.server!.off('error', onError);
         resolve();
       });

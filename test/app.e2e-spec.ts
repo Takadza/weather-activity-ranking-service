@@ -44,7 +44,10 @@ describe('App e2e smoke (mocked provider)', () => {
   let app: INestApplication<Server> | undefined;
 
   beforeAll(async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.API_KEY = '';
     process.env.METRICS_TOKEN = '';
+    process.env.REDIS_URL = '';
     process.env.THROTTLE_TTL_MS = '60000';
     process.env.THROTTLE_LIMIT = '60';
     process.env.ALLOWED_ORIGINS = '';
@@ -98,11 +101,14 @@ describe('App e2e smoke (mocked provider)', () => {
   });
 });
 
-describe('App e2e metrics token + throttle', () => {
+describe('App e2e API key + metrics token + throttle', () => {
   let app: INestApplication<Server> | undefined;
 
   beforeAll(async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.API_KEY = 'e2e-api-key';
     process.env.METRICS_TOKEN = 'e2e-metrics-secret';
+    process.env.REDIS_URL = '';
     process.env.THROTTLE_TTL_MS = '60000';
     process.env.THROTTLE_LIMIT = '3';
     process.env.ALLOWED_ORIGINS = '';
@@ -112,8 +118,54 @@ describe('App e2e metrics token + throttle', () => {
 
   afterAll(async () => {
     if (app) await app.close();
+    delete process.env.API_KEY;
     delete process.env.METRICS_TOKEN;
     process.env.THROTTLE_LIMIT = '60';
+  });
+
+  it('rejects GraphQL without API key', async () => {
+    const res = await request(app!.getHttpServer())
+      .post('/graphql')
+      .send({ query: '{ health { status } }' });
+
+    // Nest may map UnauthorizedException to HTTP 401 or GraphQL errors (HTTP 200).
+    if (res.status === 401) {
+      const body = res.body as { message?: string };
+      expect(body.message).toMatch(/api key/i);
+      return;
+    }
+
+    expect(res.status).toBe(200);
+    const body = res.body as {
+      data?: unknown;
+      errors?: Array<{ message?: string; extensions?: { code?: string } }>;
+    };
+    expect(body.data).toBeNull();
+    expect(body.errors?.length).toBeGreaterThan(0);
+    const combined = JSON.stringify(body.errors);
+    expect(combined).toMatch(/api key|Unauthorized|UNAUTHENTICATED/i);
+  });
+
+  it('accepts GraphQL with X-API-Key', async () => {
+    const res = await request(app!.getHttpServer())
+      .post('/graphql')
+      .set('X-API-Key', 'e2e-api-key')
+      .send({
+        query:
+          '{ health { status refresh { trackedLocationCount lastError } } }',
+      })
+      .expect(200);
+    const body = res.body as {
+      errors?: unknown;
+      data?: { health?: { refresh?: { lastError: string | null } } };
+    };
+    expect(body.errors).toBeUndefined();
+    // Without metrics token, lastError is redacted.
+    expect(body.data?.health?.refresh?.lastError).toBeNull();
+  });
+
+  it('GET /health/live remains public', async () => {
+    await request(app!.getHttpServer()).get('/health/live').expect(200);
   });
 
   it('GET /metrics requires token when METRICS_TOKEN is set', async () => {
@@ -129,11 +181,14 @@ describe('App e2e metrics token + throttle', () => {
       query: '{ health { status refresh { trackedLocationCount } } }',
     };
     for (let i = 0; i < 3; i++) {
-      await request(app!.getHttpServer()).post('/graphql').send(query);
+      await request(app!.getHttpServer())
+        .post('/graphql')
+        .set('X-API-Key', 'e2e-api-key')
+        .send(query);
     }
-    // Nest GraphQL maps ThrottlerException into the errors array (HTTP often still 200).
     const res = await request(app!.getHttpServer())
       .post('/graphql')
+      .set('X-API-Key', 'e2e-api-key')
       .send(query);
     const body = res.body as { errors?: Array<{ message?: string }> };
     expect(body.errors?.[0]?.message).toMatch(/Too Many Requests/i);
@@ -144,6 +199,8 @@ describe('App e2e CORS', () => {
   let app: INestApplication<Server> | undefined;
 
   beforeAll(async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.API_KEY = '';
     process.env.METRICS_TOKEN = '';
     process.env.THROTTLE_LIMIT = '60';
     process.env.ALLOWED_ORIGINS = 'https://example.com';

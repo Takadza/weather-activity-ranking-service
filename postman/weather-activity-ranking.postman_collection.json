@@ -1,0 +1,209 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Weather Activity Ranking Service",
+    "description": "Local Compose stack (api on :3000).\n\nImport into Postman: File → Import → this file.\n\nStart stack: `docker compose up --build -d`\n\nDefault Compose API key: `local-compose-api-key`. Metrics token: `local-compose-metrics-token`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "apiKey",
+      "value": "local-compose-api-key"
+    },
+    {
+      "key": "metricsToken",
+      "value": "local-compose-metrics-token"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /health/live",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health/live",
+              "host": ["{{baseUrl}}"],
+              "path": ["health", "live"]
+            },
+            "description": "Public liveness (no API key)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            },
+            "description": "Compatibility health probe (API key). Add X-Metrics-Token for lastError detail."
+          },
+          "response": []
+        },
+        {
+          "name": "GraphQL health",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query HealthCheck {\n  health {\n    status\n    refresh {\n      lastSuccessAt\n      lastAttemptAt\n      lastError\n      trackedLocationCount\n    }\n  }\n}\n",
+                "variables": ""
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Activity ranking",
+      "item": [
+        {
+          "name": "Rank by name — Cape Town",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByName($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location {\n      id\n      name\n      country\n      admin1\n      latitude\n      longitude\n    }\n    alternatives {\n      name\n      country\n      admin1\n      latitude\n      longitude\n    }\n    rubricVersion\n    lastUpdated\n    dataAgeSeconds\n    stale\n    rankings {\n      activity\n      overallScore\n      rank\n      days {\n        date\n        score\n        available\n        reasonCodes\n      }\n    }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"name\": \"Cape Town\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Cold-start may call Open-Meteo on first request for an unknown location."
+          },
+          "response": []
+        },
+        {
+          "name": "Rank by coordinates — Cape Town",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankByCoords($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location {\n      id\n      name\n      country\n      latitude\n      longitude\n    }\n    alternatives {\n      name\n      country\n    }\n    rubricVersion\n    lastUpdated\n    dataAgeSeconds\n    stale\n    rankings {\n      activity\n      overallScore\n      rank\n      days {\n        date\n        score\n        available\n        reasonCodes\n      }\n    }\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"latitude\": -33.9249,\n    \"longitude\": 18.4241\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Coordinates win if both name and lat/lon are set. Coordinate lookups do not auto-track."
+          },
+          "response": []
+        },
+        {
+          "name": "Rank by name — Ambiguous (Springfield)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-API-Key",
+                "value": "{{apiKey}}"
+              }
+            ],
+            "body": {
+              "mode": "graphql",
+              "graphql": {
+                "query": "query RankAmbiguous($location: LocationInput!) {\n  activityRanking(location: $location) {\n    location {\n      name\n      country\n      admin1\n      latitude\n      longitude\n    }\n    alternatives {\n      name\n      country\n      admin1\n      latitude\n      longitude\n    }\n    rankings {\n      activity\n      overallScore\n      rank\n    }\n    stale\n  }\n}\n",
+                "variables": "{\n  \"location\": {\n    \"name\": \"Springfield\"\n  }\n}"
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/graphql",
+              "host": ["{{baseUrl}}"],
+              "path": ["graphql"]
+            },
+            "description": "Expect alternatives[] when the geocode name is ambiguous."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Metrics",
+      "item": [
+        {
+          "name": "GET /metrics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Metrics-Token",
+                "value": "{{metricsToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/metrics",
+              "host": ["{{baseUrl}}"],
+              "path": ["metrics"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import { ValidationPipe } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
@@ -19,6 +20,12 @@ async function bootstrap() {
   app.enableShutdownHooks();
   app.use(requestIdMiddleware);
   app.use(helmet());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
 
   const config = app.get(ConfigService);
   const trustProxy = config.get<string>('trustProxy', '');

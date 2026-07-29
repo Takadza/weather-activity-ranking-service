@@ -63,15 +63,21 @@ function makeService(
       },
     );
 
+  const deleteExpired = jest.fn().mockResolvedValue(0);
+
   const service = new RefreshService(
     { listTrackedLocations } as never,
     { upsertForecastDays } as never,
     { recordRefreshSuccess, recordRefreshFailure } as never,
+    { deleteExpired } as never,
     { fetchForecast } as never,
     {
       get: (key: string, defaultValue?: number) => {
         if (key === 'refreshConcurrency') {
           return overrides.refreshConcurrency ?? 5;
+        }
+        if (key === 'geocodeCacheTtlSeconds') {
+          return 604_800;
         }
         return defaultValue;
       },
@@ -88,6 +94,7 @@ function makeService(
     recordRefreshSuccess,
     recordRefreshFailure,
     withAdvisoryLock,
+    deleteExpired,
   };
 }
 

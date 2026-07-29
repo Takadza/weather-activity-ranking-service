@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { MetricsService } from '../metrics/metrics.service';
 import { OpenMeteoClient } from '../open-meteo/client';
 import { ForecastsRepository } from '../store/forecasts.repository';
+import { GeocodeCacheRepository } from '../store/geocode-cache.repository';
 import { LocationsRepository } from '../store/locations.repository';
 import { PrismaService } from '../store/prisma.service';
 import { RefreshMetaRepository } from '../store/refresh-meta.repository';
@@ -20,6 +21,7 @@ export class RefreshService {
     private readonly locations: LocationsRepository,
     private readonly forecasts: ForecastsRepository,
     private readonly refreshMeta: RefreshMetaRepository,
+    private readonly geocodeCache: GeocodeCacheRepository,
     private readonly openMeteo: OpenMeteoClient,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
@@ -40,6 +42,14 @@ export class RefreshService {
 
   private async runCycleLocked(): Promise<void> {
     this.metrics.increment('refresh_cycles_total');
+    const geocodeTtl = this.config.get<number>(
+      'geocodeCacheTtlSeconds',
+      604_800,
+    );
+    const deleted = await this.geocodeCache.deleteExpired(geocodeTtl);
+    if (deleted > 0) {
+      this.logger.log(`Deleted ${deleted} expired geocode cache row(s)`);
+    }
     const tracked = await this.locations.listTrackedLocations();
     const configured = this.config.get<number>('refreshConcurrency', 5);
     const concurrency =

@@ -42,18 +42,35 @@ function cacheRow(resultsJson: unknown): GeocodeCacheRow {
 }
 
 function makeDeps(overrides: Record<string, unknown> = {}) {
+  const tryPromoteTracked = jest
+    .fn<Promise<LocationRow>, [string]>()
+    .mockImplementation((id: string) =>
+      Promise.resolve({
+        id,
+        name: 'promoted',
+        country: null,
+        admin1: null,
+        latitude: 0,
+        longitude: 0,
+        tracked: true,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    );
+
   return {
     geocode: jest.fn<Promise<GeocodeResult[]>, [string]>(),
     findGeocodeCache: jest.fn<Promise<GeocodeCacheRow | null>, [string]>(),
     upsertGeocodeCache: jest.fn<Promise<GeocodeCacheRow>, [unknown]>(),
     findOrCreateLocation: jest.fn<Promise<LocationRow>, [GeocodeResult]>(),
+    tryPromoteTracked,
     now: () => now,
     ...overrides,
   };
 }
 
 describe('resolveLocationInput', () => {
-  it('uses coordinates when they are supplied, even with a name', async () => {
+  it('uses coordinates when they are supplied, even with a name, without tracking', async () => {
     const location = locationFor(
       {
         name: 'Given',
@@ -62,7 +79,7 @@ describe('resolveLocationInput', () => {
         latitude: 1,
         longitude: 2,
       },
-      true,
+      false,
     );
     const deps = makeDeps({
       findOrCreateLocation: jest.fn().mockResolvedValue(location),
@@ -77,14 +94,15 @@ describe('resolveLocationInput', () => {
         latitude: 1,
         longitude: 2,
       },
-      { tracked: true },
+      { tracked: false },
     );
+    expect(deps.tryPromoteTracked).not.toHaveBeenCalled();
     expect(deps.geocode).not.toHaveBeenCalled();
     expect(deps.findGeocodeCache).not.toHaveBeenCalled();
     expect(deps.upsertGeocodeCache).not.toHaveBeenCalled();
   });
 
-  it('labels coordinate-only locations with their coordinates', async () => {
+  it('labels coordinate-only locations with their coordinates and does not track', async () => {
     const location = locationFor(
       {
         name: '1,2',
@@ -93,7 +111,7 @@ describe('resolveLocationInput', () => {
         latitude: 1,
         longitude: 2,
       },
-      true,
+      false,
     );
     const deps = makeDeps({
       findOrCreateLocation: jest.fn().mockResolvedValue(location),
@@ -108,13 +126,15 @@ describe('resolveLocationInput', () => {
         latitude: 1,
         longitude: 2,
       },
-      { tracked: true },
+      { tracked: false },
     );
+    expect(deps.tryPromoteTracked).not.toHaveBeenCalled();
   });
 
-  it('uses normalized cache candidates and maps all of them to locations', async () => {
-    const parisLocation = locationFor(paris, true);
+  it('uses normalized cache candidates and promotes only the primary', async () => {
+    const parisLocation = locationFor(paris, false);
     const texasLocation = locationFor(parisTexas, false);
+    const promoted = { ...parisLocation, tracked: true };
     const deps = makeDeps({
       findGeocodeCache: jest
         .fn()
@@ -123,28 +143,31 @@ describe('resolveLocationInput', () => {
         .fn()
         .mockResolvedValueOnce(parisLocation)
         .mockResolvedValueOnce(texasLocation),
+      tryPromoteTracked: jest.fn().mockResolvedValue(promoted),
     });
 
     await expect(
       resolveLocationInput({ name: ' Paris ' }, deps),
     ).resolves.toEqual({
-      location: parisLocation,
+      location: promoted,
       alternatives: [texasLocation],
     });
     expect(deps.findGeocodeCache).toHaveBeenCalledWith('paris');
     expect(deps.findOrCreateLocation).toHaveBeenNthCalledWith(1, paris, {
-      tracked: true,
+      tracked: false,
     });
     expect(deps.findOrCreateLocation).toHaveBeenNthCalledWith(2, parisTexas, {
       tracked: false,
     });
+    expect(deps.tryPromoteTracked).toHaveBeenCalledWith(parisLocation.id);
     expect(deps.geocode).not.toHaveBeenCalled();
     expect(deps.upsertGeocodeCache).not.toHaveBeenCalled();
   });
 
-  it('geocodes a cache miss, persists candidates, and returns alternatives', async () => {
-    const parisLocation = locationFor(paris, true);
+  it('geocodes a cache miss, persists candidates, and promotes primary', async () => {
+    const parisLocation = locationFor(paris, false);
     const texasLocation = locationFor(parisTexas, false);
+    const promoted = { ...parisLocation, tracked: true };
     const deps = makeDeps({
       findGeocodeCache: jest.fn().mockResolvedValue(null),
       geocode: jest.fn().mockResolvedValue([paris, parisTexas]),
@@ -155,27 +178,43 @@ describe('resolveLocationInput', () => {
         .fn()
         .mockResolvedValueOnce(parisLocation)
         .mockResolvedValueOnce(texasLocation),
+      tryPromoteTracked: jest.fn().mockResolvedValue(promoted),
     });
 
     await expect(
       resolveLocationInput({ name: ' PARIS ' }, deps),
     ).resolves.toEqual({
-      location: parisLocation,
+      location: promoted,
       alternatives: [texasLocation],
     });
     expect(deps.geocode).toHaveBeenCalledWith('PARIS');
     expect(deps.findOrCreateLocation).toHaveBeenNthCalledWith(1, paris, {
-      tracked: true,
+      tracked: false,
     });
     expect(deps.findOrCreateLocation).toHaveBeenNthCalledWith(2, parisTexas, {
       tracked: false,
     });
+    expect(deps.tryPromoteTracked).toHaveBeenCalledWith(parisLocation.id);
     expect(deps.upsertGeocodeCache).toHaveBeenCalledWith({
       queryNormalized: 'paris',
       resultsJson: [paris, parisTexas],
-      bestLocationId: parisLocation.id,
+      bestLocationId: promoted.id,
       fetchedAt: now,
     });
+  });
+
+  it('keeps primary untracked when tryPromoteTracked does not promote (over cap)', async () => {
+    const parisLocation = locationFor(paris, false);
+    const deps = makeDeps({
+      findGeocodeCache: jest.fn().mockResolvedValue(cacheRow([paris])),
+      findOrCreateLocation: jest.fn().mockResolvedValue(parisLocation),
+      tryPromoteTracked: jest.fn().mockResolvedValue(parisLocation),
+    });
+
+    await expect(
+      resolveLocationInput({ name: 'Paris' }, deps),
+    ).resolves.toEqual({ location: parisLocation, alternatives: [] });
+    expect(parisLocation.tracked).toBe(false);
   });
 
   it.each([
@@ -213,7 +252,8 @@ describe('resolveLocationInput', () => {
   });
 
   it('treats expired geocode cache as a miss', async () => {
-    const parisLocation = locationFor(paris, true);
+    const parisLocation = locationFor(paris, false);
+    const promoted = { ...parisLocation, tracked: true };
     const staleFetchedAt = new Date('2026-01-01T00:00:00.000Z');
     const deps = makeDeps({
       findGeocodeCache: jest.fn().mockResolvedValue({
@@ -223,6 +263,7 @@ describe('resolveLocationInput', () => {
       geocode: jest.fn().mockResolvedValue([paris]),
       upsertGeocodeCache: jest.fn().mockResolvedValue(cacheRow([paris])),
       findOrCreateLocation: jest.fn().mockResolvedValue(parisLocation),
+      tryPromoteTracked: jest.fn().mockResolvedValue(promoted),
       geocodeCacheTtlSeconds: 3600,
       now: () => now,
     });
@@ -233,7 +274,8 @@ describe('resolveLocationInput', () => {
   });
 
   it('coalesces concurrent cache misses into one geocode call', async () => {
-    const parisLocation = locationFor(paris, true);
+    const parisLocation = locationFor(paris, false);
+    const promoted = { ...parisLocation, tracked: true };
     let releaseGeocode!: (results: GeocodeResult[]) => void;
     const geocodeGate = new Promise<GeocodeResult[]>((resolve) => {
       releaseGeocode = resolve;
@@ -243,6 +285,7 @@ describe('resolveLocationInput', () => {
       geocode: jest.fn().mockReturnValue(geocodeGate),
       upsertGeocodeCache: jest.fn().mockResolvedValue(cacheRow([paris])),
       findOrCreateLocation: jest.fn().mockResolvedValue(parisLocation),
+      tryPromoteTracked: jest.fn().mockResolvedValue(promoted),
     });
 
     const first = resolveLocationInput({ name: 'Paris' }, deps);
@@ -263,8 +306,8 @@ describe('resolveLocationInput', () => {
     releaseGeocode([paris]);
 
     await expect(Promise.all([first, second])).resolves.toEqual([
-      { location: parisLocation, alternatives: [] },
-      { location: parisLocation, alternatives: [] },
+      { location: promoted, alternatives: [] },
+      { location: promoted, alternatives: [] },
     ]);
     expect(deps.geocode).toHaveBeenCalledTimes(1);
     expect(deps.upsertGeocodeCache).toHaveBeenCalledTimes(1);

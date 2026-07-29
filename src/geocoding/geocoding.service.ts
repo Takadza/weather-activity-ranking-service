@@ -19,6 +19,7 @@ export class GeocodingService {
   ) {}
 
   resolve(input: ResolveLocationInput): Promise<ResolveLocationResult> {
+    const maxTracked = this.config.get<number>('maxTrackedLocations', 100);
     return resolveLocationInput(input, {
       geocode: (name) => this.openMeteo.geocode(name),
       findGeocodeCache: (queryNormalized) =>
@@ -27,6 +28,8 @@ export class GeocodingService {
         this.geocodeCache.upsertGeocodeCache(cacheInput),
       findOrCreateLocation: (locationInput, options) =>
         this.locations.findOrCreateLocation(locationInput, options),
+      tryPromoteTracked: (locationId) =>
+        this.locations.tryPromoteTracked(locationId, maxTracked),
       geocodeCacheTtlSeconds: this.config.get<number>(
         'geocodeCacheTtlSeconds',
         604_800,

@@ -12,6 +12,7 @@ import { WorkerHttpServer } from './worker/worker-http.server';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+      ignoreEnvFile: process.env.NODE_ENV === 'test',
       load: [configuration],
       validate: validateEnv,
     }),

@@ -11,9 +11,10 @@ The brief requires **GraphQL** (not REST). There is no OpenAPI/Swagger spec.
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/graphql` | `POST` | Activity ranking and optional health query |
-| `/health` | `GET` | Liveness + last refresh success/age (primary probe) |
+| `/health/live` | `GET` | Public liveness (no DB) |
+| `/health` / `/ready` | `GET` | Authenticated probes (API key); `lastError` only with metrics token |
 
-**Auth (v1):** none. API key / rate-limit middleware can wrap the HTTP server later.
+**Auth (v1):** shared `API_KEY` via `Authorization: Bearer <key>` or `X-API-Key`. Required when `NODE_ENV=production`. Leave unset only for local non-production DX. `/health/live` is the public liveness probe; `/health` and `/ready` require the API key.
 
 ## Files
 
@@ -40,5 +41,6 @@ Treat `stale: true` as usable last-known-good data, not a hard failure.
 ```bash
 curl -s http://localhost:3000/graphql \
   -H 'content-type: application/json' \
+  -H 'X-API-Key: local-compose-api-key' \
   -d '{"query":"query($location: LocationInput!){ activityRanking(location:$location){ location{name} stale rankings{activity overallScore rank} } }","variables":{"location":{"name":"Cape Town"}}}'
 ```

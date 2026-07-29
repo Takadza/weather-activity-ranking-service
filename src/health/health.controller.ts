@@ -1,23 +1,39 @@
-import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  HttpStatus,
+  Req,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SkipThrottle } from '@nestjs/throttler';
+import type { Request } from 'express';
+import { SkipApiKey } from '../common/skip-api-key.decorator';
+import { isMetricsAuthorized } from '../metrics/metrics-auth';
 import { HealthPayload, HealthService } from './health.service';
 
 @Controller('health')
-@SkipThrottle()
 export class HealthController {
-  constructor(private readonly health: HealthService) {}
+  constructor(
+    private readonly health: HealthService,
+    private readonly config: ConfigService,
+  ) {}
 
   /** Liveness: process is up (no DB). */
   @Get('live')
+  @SkipThrottle()
+  @SkipApiKey()
   live(): { status: 'ok' } {
     return { status: 'ok' };
   }
 
   /** Readiness: DB + refresh freshness; 503 when degraded or DB unavailable. */
   @Get('ready')
-  async ready(): Promise<HealthPayload> {
+  async ready(@Req() req: Request): Promise<HealthPayload> {
     try {
-      const payload = await this.health.getHealth();
+      const payload = await this.health.getHealth({
+        includeDetails: this.includeDetails(req),
+      });
       if (payload.status === 'degraded') {
         throw new HttpException(payload, HttpStatus.SERVICE_UNAVAILABLE);
       }
@@ -39,7 +55,17 @@ export class HealthController {
    * /health/live and /health/ready for new deployments.
    */
   @Get()
-  getHealth(): Promise<HealthPayload> {
-    return this.health.getHealth();
+  getHealth(@Req() req: Request): Promise<HealthPayload> {
+    return this.health.getHealth({
+      includeDetails: this.includeDetails(req),
+    });
+  }
+
+  private includeDetails(req: Request): boolean {
+    return isMetricsAuthorized(
+      this.config.get<string>('metricsToken', ''),
+      req.header('authorization') ?? undefined,
+      req.header('x-metrics-token') ?? undefined,
+    );
   }
 }

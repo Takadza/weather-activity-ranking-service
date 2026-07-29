@@ -13,6 +13,7 @@ describe('WorkerHttpServer', () => {
     const config = {
       get: (key: string, defaultValue?: unknown) => {
         if (key === 'workerMetricsPort') return 0; // ephemeral
+        if (key === 'workerBindHost') return '127.0.0.1';
         if (key === 'metricsToken') return 'worker-secret';
         return defaultValue;
       },

@@ -5,6 +5,9 @@ describe('LocationsRepository', () => {
   const prisma = new PrismaService();
   const repository = new LocationsRepository(prisma);
 
+  const CAP_LAT_BASE = 57.11111;
+  const CAP_LON_BASE = 46.22222;
+
   beforeAll(async () => {
     await prisma.$connect();
   });
@@ -15,6 +18,10 @@ describe('LocationsRepository', () => {
         OR: [
           { latitude: 55.11111, longitude: 44.22222 },
           { latitude: 56.11111, longitude: 45.22222 },
+          {
+            latitude: { gte: CAP_LAT_BASE, lte: CAP_LAT_BASE + 0.00005 },
+            longitude: { gte: CAP_LON_BASE, lte: CAP_LON_BASE + 0.00005 },
+          },
         ],
       },
     });
@@ -67,6 +74,38 @@ describe('LocationsRepository', () => {
 
     await prisma.location.deleteMany({
       where: { id: { in: [tracked.id, untracked.id] } },
+    });
+  });
+
+  it('tryPromoteTracked respects maxTracked and findOrCreateLocation does not bypass the cap', async () => {
+    const baseline = await repository.countTrackedLocations();
+    const cap = baseline + 1;
+
+    const a = await repository.findOrCreateLocation(
+      {
+        name: 'Cap-A',
+        latitude: CAP_LAT_BASE,
+        longitude: CAP_LON_BASE,
+      },
+      { tracked: true, maxTracked: cap },
+    );
+    const b = await repository.findOrCreateLocation(
+      {
+        name: 'Cap-B',
+        latitude: CAP_LAT_BASE + 0.00001,
+        longitude: CAP_LON_BASE + 0.00001,
+      },
+      { tracked: true, maxTracked: cap },
+    );
+
+    expect(a.tracked).toBe(true);
+    expect(b.tracked).toBe(false);
+
+    const again = await repository.tryPromoteTracked(b.id, cap);
+    expect(again.tracked).toBe(false);
+
+    await prisma.location.deleteMany({
+      where: { id: { in: [a.id, b.id] } },
     });
   });
 });

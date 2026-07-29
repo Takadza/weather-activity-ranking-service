@@ -1,4 +1,5 @@
 import { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { Server } from 'node:http';
@@ -15,7 +16,18 @@ describe('HealthController', () => {
     const moduleRef = await Test.createTestingModule({
       imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 1000 }])],
       controllers: [HealthController],
-      providers: [{ provide: HealthService, useValue: { getHealth } }],
+      providers: [
+        { provide: HealthService, useValue: { getHealth } },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string, defaultValue?: string) => {
+              if (key === 'metricsToken') return '';
+              return defaultValue;
+            },
+          },
+        },
+      ],
     }).compile();
 
     app = moduleRef.createNestApplication();

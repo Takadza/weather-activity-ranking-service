@@ -103,13 +103,16 @@ Worker: same image, command override e.g. `node dist/worker.js`.
 
 | Service | Role |
 |---|---|
-| `db` | Postgres 16, volume for data, healthcheck |
-| `api` | GraphQL + health; depends on healthy `db`; runs migrations on start |
-| `worker` | Refresh loop; same image; depends on `db` |
+| `db` | Postgres 16, volume for data, healthcheck (loopback publish) |
+| `redis` | Shared throttler storage |
+| `api` | GraphQL + health; depends on healthy `db` + `redis`; runs migrations on start |
+| `worker` | Refresh loop; same image; worker metrics published on `127.0.0.1:3001` |
 
-Env from `.env` / Compose `environment`. Publish `api` on `3000`.
+**Not a production template.** Compose ships demo `API_KEY` / `METRICS_TOKEN` and weak DB password for local use only. Prefer a secret store and digest-pinned base images (`node@sha256:…`, `postgres@sha256:…`) in real deploys. Prefer running `prisma migrate deploy` as a one-shot Job rather than on every process start (ops follow-up).
 
-**v1 scale story:** Compose runs one `api`. Production scale = more API tasks behind a platform LB (see `02`)—Compose file need not define the LB.
+Env from Compose `environment`. Publish `api` on `3000`.
+
+**v1 scale story:** Compose runs one `api`. Production scale = more API tasks behind a platform LB with shared `REDIS_URL` (see `02`).
 
 ---
 
@@ -131,12 +134,18 @@ Do **not** block the submission on live cloud deploy. Reviewers care about runna
 |---|---|
 | `DATABASE_URL` | Postgres connection |
 | `PORT` | API port |
+| `API_KEY` | Consumer GraphQL/HTTP auth (required in production) |
+| `METRICS_TOKEN` | Metrics + detailed health (required in production) |
+| `REDIS_URL` | Shared throttler (required in production) |
+| `MAX_TRACKED_LOCATIONS` | Cap on auto-tracked locations (default 100) |
+| `WORKER_BIND_HOST` | Worker metrics bind (default `127.0.0.1`) |
 | `REFRESH_INTERVAL_MS` | Worker schedule (ms); default `21600000` |
 | `REFRESH_CONCURRENCY` | Worker pool |
 | `STALE_AFTER_SECONDS` | Response `stale` flag |
 | `LOG_LEVEL` | Structured logging |
+| `INTROSPECTION` | GraphQL introspection override (`true`/`false`) |
 
-Commit `.env.example` only. Use GitHub Actions secrets if CD is added later.
+Commit `.env.example` only (`.gitignore` ignores `.env.*` except `.env.example`). Use GitHub Actions secrets if CD is added later. Rotate `API_KEY` / `METRICS_TOKEN` on a defined schedule.
 
 ---
 

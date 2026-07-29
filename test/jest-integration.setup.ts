@@ -1,6 +1,5 @@
 /**
- * Runs before e2e modules load so ConfigModule validate/load sees DATABASE_URL.
- * Jest setupFiles execute before the test framework is installed into the env.
+ * Runs before integration modules load so ConfigModule validate/load sees safe env.
  */
 process.env.DATABASE_URL ??=
   'postgresql://wars:wars@localhost:5432/wars?schema=public';

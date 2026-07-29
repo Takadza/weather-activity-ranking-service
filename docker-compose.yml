@@ -15,6 +15,16 @@ services:
     volumes:
       - wars_pg:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   api:
     build: .
     ports:
@@ -23,6 +33,7 @@ services:
       DATABASE_URL: postgresql://wars:wars@db:5432/wars?schema=public
       PORT: "3000"
       WORKER_METRICS_PORT: "3001"
+      WORKER_BIND_HOST: "0.0.0.0"
       REFRESH_INTERVAL_MS: "21600000"
       REFRESH_CONCURRENCY: "5"
       OPEN_METEO_TIMEOUT_MS: "5000"
@@ -31,14 +42,20 @@ services:
       STALE_AFTER_SECONDS: "21600"
       GEOCODE_CACHE_TTL_SECONDS: "604800"
       FORECAST_CACHE_TTL_MS: "60000"
+      FORECAST_CACHE_MAX_ENTRIES: "256"
+      MAX_TRACKED_LOCATIONS: "100"
       LOG_LEVEL: info
       NODE_ENV: production
       ALLOWED_ORIGINS: ""
-      METRICS_TOKEN: ""
+      API_KEY: "local-compose-api-key"
+      METRICS_TOKEN: "local-compose-metrics-token"
+      REDIS_URL: redis://redis:6379
       THROTTLE_TTL_MS: "60000"
       THROTTLE_LIMIT: "60"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
     healthcheck:
@@ -57,11 +74,15 @@ services:
   worker:
     build: .
     ports:
-      - "3001:3001"
+      - "127.0.0.1:3001:3001"
     environment:
       <<: *app_env
+      # Inside Compose, healthchecks hit the container loopback; bind all interfaces in-container.
+      WORKER_BIND_HOST: "0.0.0.0"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     # Migrate is idempotent; avoids racing schema before API finishes deploy.
     command: ["sh", "-c", "npx prisma migrate deploy && node dist/worker.js"]

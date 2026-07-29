@@ -27,6 +27,8 @@ export type ResolveLocationDeps = {
     input: LocationInput,
     options?: FindOrCreateLocationOptions,
   ): Promise<LocationRow>;
+  /** Promote primary named location when under the tracked cap. */
+  tryPromoteTracked(locationId: string): Promise<LocationRow>;
   now?: () => Date;
   /** Geocode cache TTL in seconds; 0 disables expiry. Default 604800 (7d). */
   geocodeCacheTtlSeconds?: number;
@@ -99,12 +101,13 @@ async function mapCandidatesToLocations(
   }
 
   const locations = await Promise.all(
-    candidates.map((candidate, index) =>
-      deps.findOrCreateLocation(candidate, { tracked: index === 0 }),
+    candidates.map((candidate) =>
+      deps.findOrCreateLocation(candidate, { tracked: false }),
     ),
   );
 
-  return { location: locations[0], alternatives: locations.slice(1) };
+  const primary = await deps.tryPromoteTracked(locations[0].id);
+  return { location: primary, alternatives: locations.slice(1) };
 }
 
 async function resolveCacheMiss(
@@ -159,7 +162,7 @@ export async function resolveLocationInput(
         latitude: input.latitude!,
         longitude: input.longitude!,
       },
-      { tracked: true },
+      { tracked: false },
     );
     return { location, alternatives: [] };
   }

@@ -103,16 +103,16 @@ Counters are **in-process** (no shared store):
 | API | `GET /metrics` (port 3000) | `cold_starts_total`, `cold_start_rejects_total`, `provider_errors_total` |
 | Worker | `GET /metrics` (port `WORKER_METRICS_PORT`, default 3001) | `refresh_cycles_total`, `refresh_location_failures_total` |
 
-When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. Leave unset for local Compose demos; set in real deployments.
+When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. **Required when `NODE_ENV=production`.** Public `/health` and `/ready` omit `lastError` unless the same metrics token is presented. Rotate `API_KEY` / `METRICS_TOKEN` periodically; prefer scraping worker metrics on loopback or a private network (TLS at the edge/mesh — the worker HTTP server itself is cleartext by design).
 
 Scrape both processes in production.
 
 ### 4.4 Client rate limiting
 
 - Global Nest throttler (defaults: `THROTTLE_LIMIT=60` per `THROTTLE_TTL_MS=60000`)
-- Applies to GraphQL and HTTP; HTTP `/health/*` and `/metrics` are skipped (GraphQL `health` still counts)
+- Applies to GraphQL and HTTP; `/health/live` and `/metrics` are skipped (GraphQL `health` still counts; `/health` and `/ready` are throttled)
 - On GraphQL, over-limit requests surface as a GraphQL error (`Too Many Requests`) rather than a bare HTTP 429
-- Limits are **per process** (in-memory); N API replicas ≈ N× limit
+- When `REDIS_URL` is set, limits are shared across API replicas; **required in production**
 - Behind a reverse proxy/LB, set `TRUST_PROXY=1` (or hop count) so client IP for throttling is taken from `X-Forwarded-For` correctly — leave unset for direct Compose/port exposure
 
 ---
@@ -121,11 +121,12 @@ Scrape both processes in production.
 
 - No PII collection
 - Validate `LocationInput` (name length cap, finite lat/lon ranges)
-- Parameterised queries only (Prisma)
-- No user auth in v1 (deliberate cut)
+- Parameterised queries only (Prisma) — never use `$queryRawUnsafe` / `$executeRawUnsafe`
+- Shared `API_KEY` for GraphQL/HTTP (except `/health/live` and `/metrics`)
 - Helmet security headers on the API; CORS only when `ALLOWED_ORIGINS` is non-empty
-- Client rate limiting (see §4.4); optional `METRICS_TOKEN` for scrape endpoints
-- Secrets only via env (see `05`); never commit `.env`
+- Client rate limiting (see §4.4); `METRICS_TOKEN` for scrape endpoints and detailed health
+- Tracked locations: named geocode primary only, capped by `MAX_TRACKED_LOCATIONS` (coords never auto-track)
+- Secrets only via env (see `05`); never commit `.env` / `.env.production` (gitignore covers `.env.*` except `.env.example`)
 
 ---
 
@@ -135,17 +136,17 @@ Documented for reviewers—focused submission beats exhaustive (`01` + brief).
 
 | Cut | Why |
 |---|---|
-| No auth / multi-tenant | Out of brief |
+| No multi-tenant / OAuth | Out of brief; shared API key is enough for v1 |
 | No forecast history | No FR; storage explosion |
 | No microservices | ADR-001 |
 | No serverless | ADR-002 |
 | No CDN / multi-region / WAF | Backend GraphQL; YAGNI |
-| No Redis in v1 | In-process cache sufficient initially |
 | No message queue in v1 | One worker + concurrency config |
 | No admin UI for locations | Out of brief |
 | No “is there a ski resort?” | Q4 weather-only scope |
 | Cloud LB not provisioned | Design for it; ship one replica |
 | Full CD to production cloud | Optional; CI is mandatory shape in `05` |
+| App-level HTTPS for worker metrics | Terminate TLS at edge/mesh; bind loopback by default |
 
 ---
 

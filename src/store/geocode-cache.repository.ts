@@ -39,4 +39,19 @@ export class GeocodeCacheRepository {
       },
     });
   }
+
+  /** Delete geocode cache rows older than ttlSeconds. Returns deleted count. */
+  async deleteExpired(
+    ttlSeconds: number,
+    now: Date = new Date(),
+  ): Promise<number> {
+    if (ttlSeconds <= 0) {
+      return 0;
+    }
+    const cutoff = new Date(now.getTime() - ttlSeconds * 1000);
+    const result = await this.prisma.geocodeCache.deleteMany({
+      where: { fetchedAt: { lt: cutoff } },
+    });
+    return result.count;
+  }
 }

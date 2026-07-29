@@ -61,11 +61,33 @@ describe('HealthService.getHealth', () => {
       refreshMeta: meta({ lastSuccessAt: null, lastError: 'boom' }),
     });
 
-    const result = await service.getHealth();
+    const result = await service.getHealth({ includeDetails: true });
 
     expect(result.status).toBe('ok');
     expect(result.refresh.trackedLocationCount).toBe(0);
     expect(result.refresh.lastError).toBe('boom');
+  });
+
+  it('redacts lastError when includeDetails is false', async () => {
+    const { service } = makeService({
+      trackedLocationCount: 0,
+      refreshMeta: meta({ lastSuccessAt: null, lastError: 'boom' }),
+    });
+
+    const result = await service.getHealth({ includeDetails: false });
+
+    expect(result.refresh.lastError).toBeNull();
+  });
+
+  it('redacts lastError by default', async () => {
+    const { service } = makeService({
+      trackedLocationCount: 0,
+      refreshMeta: meta({ lastError: 'secret-db-error' }),
+    });
+
+    const result = await service.getHealth();
+
+    expect(result.refresh.lastError).toBeNull();
   });
 
   it('returns degraded when tracked and lastSuccessAt is null', async () => {
@@ -74,7 +96,7 @@ describe('HealthService.getHealth', () => {
       refreshMeta: meta({ lastSuccessAt: null }),
     });
 
-    const result = await service.getHealth();
+    const result = await service.getHealth({ includeDetails: true });
 
     expect(result.status).toBe('degraded');
     expect(result.refresh.trackedLocationCount).toBe(3);
@@ -113,7 +135,7 @@ describe('HealthService.getHealth', () => {
       }),
     });
 
-    const result = await service.getHealth();
+    const result = await service.getHealth({ includeDetails: true });
 
     expect(result.status).toBe('ok');
     expect(result.refresh.lastError).toBe('loc-b: provider down');
@@ -133,7 +155,7 @@ describe('HealthService.getHealth', () => {
       }),
     });
 
-    const result = await service.getHealth();
+    const result = await service.getHealth({ includeDetails: true });
 
     expect(result).toEqual({
       status: 'ok',

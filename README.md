@@ -66,12 +66,15 @@ npm run test:integration
 
 ```bash
 docker compose up --build -d
-curl -s http://localhost:3000/health
+curl -s http://localhost:3000/health/live
 ```
 
-- **API:** GraphQL at `http://localhost:3000/graphql`, health at `http://localhost:3000/health`
-- **Worker:** same image; refresh loop against Postgres
+- **API:** GraphQL at `http://localhost:3000/graphql` (send `X-API-Key: local-compose-api-key`), health at `http://localhost:3000/health/live`
+- **Worker:** same image; refresh loop against Postgres; metrics on `127.0.0.1:3001`
+- **Redis:** shared rate-limit store
 - On start, `api` runs `prisma migrate deploy` then listens on port 3000
+
+Compose is a **local demo** (demo tokens + weak DB password) — not a production template.
 
 Stop with `docker compose down`.
 
@@ -82,6 +85,7 @@ Stop with `docker compose down`.
 ```bash
 curl -s http://localhost:3000/graphql \
   -H 'content-type: application/json' \
+  -H 'X-API-Key: local-compose-api-key' \
   -d '{"query":"query($location: LocationInput!){ activityRanking(location:$location){ location{name} stale rankings{activity overallScore rank} } }","variables":{"location":{"name":"Cape Town"}}}'
 ```
 
@@ -89,15 +93,15 @@ More operations: [docs/contracts/examples.graphql](docs/contracts/examples.graph
 
 | Endpoint | Method | Purpose |
 |---|---|---|
-| `/graphql` | `POST` | Activity rankings (rate-limited) |
-| `/health/live` | `GET` | Liveness (no DB) |
-| `/health/ready` | `GET` | Readiness (503 when degraded or DB down) |
-| `/health` | `GET` | Compatibility probe (always 200 body) |
-| `/metrics` | `GET` | API Prometheus counters (cold-start / provider) |
+| `/graphql` | `POST` | Activity rankings (API key + rate-limited) |
+| `/health/live` | `GET` | Liveness (no DB, public) |
+| `/health/ready` | `GET` | Readiness (API key; 503 when degraded or DB down) |
+| `/health` | `GET` | Compatibility probe (API key; always 200 body) |
+| `/metrics` | `GET` | API Prometheus counters (`METRICS_TOKEN`) |
 | worker `:3001/health/live` | `GET` | Worker liveness |
-| worker `:3001/metrics` | `GET` | Worker Prometheus counters (refresh) |
+| worker `:3001/metrics` | `GET` | Worker Prometheus counters (`METRICS_TOKEN`) |
 
-Ops env (see `.env.example`): `ALLOWED_ORIGINS`, `METRICS_TOKEN` (set in real deploys), `THROTTLE_TTL_MS`, `THROTTLE_LIMIT`, `TRUST_PROXY` (set behind a reverse proxy). Requests accept/generate `x-request-id`.
+Ops env (see `.env.example`): `API_KEY`, `METRICS_TOKEN`, `REDIS_URL` (required in production), `ALLOWED_ORIGINS`, `THROTTLE_*`, `TRUST_PROXY`, `MAX_TRACKED_LOCATIONS`. Requests accept/generate `x-request-id`.
 
 ---
 
@@ -118,18 +122,16 @@ From [docs/04 §6](docs/04-operations-and-failure-modes.md) — focused submissi
 
 | Cut | Why |
 |---|---|
-| No auth / multi-tenant | Out of brief |
+| No multi-tenant / OAuth | Shared API key for v1 |
 | No forecast history | No FR; storage explosion |
 | No microservices | ADR-001 |
 | No serverless | ADR-002 |
 | No CDN / multi-region / WAF | Backend GraphQL; YAGNI |
-| No Redis in v1 | In-process cache sufficient initially |
 | No message queue in v1 | One worker + concurrency config |
 | No admin UI for locations | Out of brief |
 | No “is there a ski resort?” | Weather-only scope |
 | Cloud LB not provisioned | Design for it; ship one replica |
 | Full CD to production cloud | Optional; CI is the mandatory shape |
-
 ---
 
 ## TDD plan (stage 3)

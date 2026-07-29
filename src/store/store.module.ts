@@ -17,7 +17,10 @@ const STORE_PROVIDERS = [
     provide: ForecastCache,
     inject: [ConfigService],
     useFactory: (config: ConfigService) =>
-      new ForecastCache(config.get<number>('forecastCacheTtlMs', 60_000)),
+      new ForecastCache(
+        config.get<number>('forecastCacheTtlMs', 60_000),
+        config.get<number>('forecastCacheMaxEntries', 256),
+      ),
   },
 ];
 
