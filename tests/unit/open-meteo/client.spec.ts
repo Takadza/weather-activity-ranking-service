@@ -107,7 +107,20 @@ describe('OpenMeteoClient', () => {
         weatherCode: 1,
       },
     ];
-    expect(days).toEqual(expected);
+    expect(days).toHaveLength(2);
+    expect(
+      days.map((day) => {
+        const { raw, ...rest } = day;
+        void raw;
+        return rest;
+      }),
+    ).toEqual(expected);
+    expect(days[0].raw).toMatchObject({
+      date: '2026-07-28',
+      temperature_2m_max: 10,
+      wind_speed_10m_max_ms: 5,
+      wave_height_max: 1.2,
+    });
   });
 
   it('requests forecast with pinned wind_speed_unit=ms and daily fields', async () => {
@@ -426,6 +439,39 @@ describe('OpenMeteoClient', () => {
     expect(results).toEqual([
       { name: 'Ok', country: null, admin1: null, latitude: 1, longitude: 2 },
     ]);
+  });
+
+  it('keeps forecast available when the geocode circuit is open', async () => {
+    const geocodeBreaker = new CircuitBreaker({ failureThreshold: 1 });
+    const forecastBreaker = new CircuitBreaker({ failureThreshold: 10 });
+    const failGeocode = jest.fn(() =>
+      Promise.resolve(jsonResponse({ error: true }, 500)),
+    );
+    const geocodeClient = new OpenMeteoClient({
+      ...clientOpts(failGeocode, {
+        geocodeCircuitBreaker: geocodeBreaker,
+        forecastCircuitBreaker: forecastBreaker,
+        maxAttempts: 1,
+      }),
+    });
+    await expect(geocodeClient.geocode('Paris')).rejects.toThrow(/HTTP 500/);
+    await expect(geocodeClient.geocode('Paris')).rejects.toThrow(/circuit/i);
+
+    const fetchMock = jest.fn((url: string | URL) => {
+      const href = String(url);
+      if (href.includes('marine-api')) {
+        return Promise.resolve(jsonResponse({ daily: marineDaily }));
+      }
+      return Promise.resolve(jsonResponse({ daily: forecastDaily }));
+    });
+    const forecastClient = new OpenMeteoClient({
+      ...clientOpts(fetchMock, {
+        geocodeCircuitBreaker: geocodeBreaker,
+        forecastCircuitBreaker: forecastBreaker,
+      }),
+    });
+    const days = await forecastClient.fetchForecast(1, 2);
+    expect(days[0].tempMaxC).toBe(10);
   });
 
   it('accepts weathercode alias from forecast daily', async () => {

@@ -12,7 +12,10 @@ export type SleepFn = (ms: number) => Promise<void>;
 export type OpenMeteoClientOptions = {
   fetch?: typeof fetch;
   sleep?: SleepFn;
+  /** @deprecated Prefer forecastCircuitBreaker / geocodeCircuitBreaker. */
   circuitBreaker?: CircuitBreaker;
+  forecastCircuitBreaker?: CircuitBreaker;
+  geocodeCircuitBreaker?: CircuitBreaker;
   forecastBaseUrl?: string;
   marineBaseUrl?: string;
   geocodeBaseUrl?: string;
@@ -123,7 +126,8 @@ async function httpErrorFromResponse(res: Response): Promise<HttpError> {
 export class OpenMeteoClient {
   private readonly fetchImpl: typeof fetch;
   private readonly sleep: SleepFn;
-  private readonly circuitBreaker: CircuitBreaker;
+  private readonly forecastBreaker: CircuitBreaker;
+  private readonly geocodeBreaker: CircuitBreaker;
   private readonly forecastBaseUrl: string;
   private readonly marineBaseUrl: string;
   private readonly geocodeBaseUrl: string;
@@ -135,7 +139,11 @@ export class OpenMeteoClient {
   constructor(opts: OpenMeteoClientOptions = {}) {
     this.fetchImpl = opts.fetch ?? fetch.bind(globalThis);
     this.sleep = opts.sleep ?? defaultSleep;
-    this.circuitBreaker = opts.circuitBreaker ?? new CircuitBreaker();
+    this.forecastBreaker =
+      opts.forecastCircuitBreaker ??
+      opts.circuitBreaker ??
+      new CircuitBreaker();
+    this.geocodeBreaker = opts.geocodeCircuitBreaker ?? new CircuitBreaker();
     this.forecastBaseUrl =
       opts.forecastBaseUrl ?? 'https://api.open-meteo.com/v1/forecast';
     this.marineBaseUrl =
@@ -176,7 +184,7 @@ export class OpenMeteoClient {
     // when circuit is open). Inside the attempt, both requests overlap.
     let marineP: Promise<OpenMeteoMarineResponse | null> =
       Promise.resolve(null);
-    const forecast = await this.circuitBreaker.exec(async () => {
+    const forecast = await this.forecastBreaker.exec(async () => {
       marineP = this.fetchJsonWithRetry<OpenMeteoMarineResponse>(
         marineUrl.toString(),
         signal,
@@ -211,7 +219,7 @@ export class OpenMeteoClient {
 
     const signal = combineSignals(this.timeoutMs, opts?.signal);
 
-    const body = await this.circuitBreaker.exec(() =>
+    const body = await this.geocodeBreaker.exec(() =>
       this.fetchJsonWithRetry<OpenMeteoGeocodeResponse>(url.toString(), signal),
     );
 
@@ -273,6 +281,20 @@ export class OpenMeteoClient {
         snowfallCm: at(daily.snowfall_sum, i),
         waveHeightM: waveByDate.get(date) ?? null,
         weatherCode: at(weatherCodes, i),
+        raw: {
+          date,
+          temperature_2m_max: at(daily.temperature_2m_max, i),
+          temperature_2m_min: at(daily.temperature_2m_min, i),
+          precipitation_sum: at(daily.precipitation_sum, i),
+          precipitation_probability_max: at(
+            daily.precipitation_probability_max,
+            i,
+          ),
+          wind_speed_10m_max_ms: windMs,
+          snowfall_sum: at(daily.snowfall_sum, i),
+          weather_code: at(weatherCodes, i),
+          wave_height_max: waveByDate.get(date) ?? null,
+        },
       };
     });
   }

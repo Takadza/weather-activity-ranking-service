@@ -1,5 +1,5 @@
-import { ConfigService } from '@nestjs/config';
-import { ActivityRankingService } from '../../../src/graphql/activity-ranking.service';
+import type { ConfigService } from '@nestjs/config';
+import { ActivityRankingService } from '../../../src/activity-ranking/activity-ranking.service';
 import type { WeatherDay } from '../../../src/scoring/types';
 import type { LocationRow } from '../../../src/store/types';
 
@@ -24,11 +24,16 @@ const location: LocationRow = {
   admin1: null,
   latitude: -33.92,
   longitude: 18.42,
+  tracked: true,
   createdAt: new Date('2026-07-29T00:00:00.000Z'),
   updatedAt: new Date('2026-07-29T00:00:00.000Z'),
 };
 
-function makeService(fetchedAt: Date, now: Date, staleAfterSeconds = STALE_AFTER) {
+function makeService(
+  fetchedAt: Date,
+  now: Date,
+  staleAfterSeconds = STALE_AFTER,
+) {
   jest.useFakeTimers({ now });
 
   const service = new ActivityRankingService(
@@ -54,6 +59,7 @@ function makeService(fetchedAt: Date, now: Date, staleAfterSeconds = STALE_AFTER
         return defaultValue;
       },
     } as ConfigService,
+    { increment: jest.fn() } as never,
   );
 
   return service;

@@ -17,9 +17,9 @@ Follow the stages in order. Each step links to the next.
 | **2. Design** | Done | [docs/02-system-design.md](docs/02-system-design.md) → see Design packet below |
 | **3. TDD plan** | Done | [docs/superpowers/plans/2026-07-28-weather-activity-ranking.md](docs/superpowers/plans/2026-07-28-weather-activity-ranking.md) |
 | **4. Code** | Done | TDD plan Tasks 1–9 complete (app, worker, Compose, CI) |
-| **5. Review** | Next | Deliberate-cuts polish / submission readiness |
+| **5. Review** | Done | Production-readiness remediation complete |
 
-**Current stage:** Code complete → Review.
+**Current stage:** Review complete.
 
 Full doc index (same flow): [docs/README.md](docs/README.md)
 
@@ -90,7 +90,11 @@ More operations: [docs/contracts/examples.graphql](docs/contracts/examples.graph
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/graphql` | `POST` | Activity rankings |
-| `/health` | `GET` | Liveness + refresh status |
+| `/health/live` | `GET` | Liveness (no DB) |
+| `/health/ready` | `GET` | Readiness (503 when degraded) |
+| `/health` | `GET` | Compatibility probe (always 200 body) |
+| `/metrics` | `GET` | API Prometheus counters (cold-start / provider) |
+| worker `:3001/metrics` | `GET` | Worker Prometheus counters (refresh) |
 
 ---
 

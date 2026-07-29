@@ -165,6 +165,7 @@ function scoreIndoor(day: WeatherDay): DayScore {
   }
 
   let score = 50;
+  const reasonCodes: ReasonCode[] = [];
   const tempMaxC = day.tempMaxC;
 
   if (tempMaxC < 10 || tempMaxC > 28) {
@@ -190,11 +191,18 @@ function scoreIndoor(day: WeatherDay): DayScore {
     score -= 15;
   }
 
+  const clamped = clamp(score);
+  if (clamped >= 60) {
+    reasonCodes.push('POOR_OUTDOOR_WEATHER');
+  } else {
+    reasonCodes.push('GOOD_OUTDOOR_WEATHER');
+  }
+
   return {
     date: day.date,
     available: true,
-    score: clamp(score),
-    reasonCodes: [],
+    score: clamped,
+    reasonCodes,
   };
 }
 

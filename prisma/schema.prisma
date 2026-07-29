@@ -13,6 +13,8 @@ model Location {
   admin1    String?
   latitude  Float
   longitude Float
+  /// When true, the refresh worker includes this location. Selected/primary only.
+  tracked   Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -20,6 +22,7 @@ model Location {
   geocodeBestFor GeocodeCache[] @relation("GeocodeBestLocation")
 
   @@unique([latitude, longitude])
+  @@index([tracked])
   @@map("locations")
 }
 

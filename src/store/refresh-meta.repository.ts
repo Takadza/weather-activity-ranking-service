@@ -24,20 +24,22 @@ export class RefreshMetaRepository {
     };
   }
 
-  async recordRefreshSuccess(): Promise<void> {
+  async recordRefreshSuccess(partialError?: string | null): Promise<void> {
     const now = new Date();
+    const lastError =
+      partialError === undefined ? null : (partialError ?? null);
     await this.prisma.refreshMeta.upsert({
       where: { id: REFRESH_META_ID },
       create: {
         id: REFRESH_META_ID,
         lastAttemptAt: now,
         lastSuccessAt: now,
-        lastError: null,
+        lastError,
       },
       update: {
         lastAttemptAt: now,
         lastSuccessAt: now,
-        lastError: null,
+        lastError,
       },
     });
   }

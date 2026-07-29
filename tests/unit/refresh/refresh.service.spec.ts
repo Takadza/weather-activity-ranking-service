@@ -24,19 +24,23 @@ function location(id: string, lat: number, lon: number): LocationRow {
     admin1: null,
     latitude: lat,
     longitude: lon,
+    tracked: true,
     createdAt: new Date('2026-07-29T00:00:00.000Z'),
     updatedAt: new Date('2026-07-29T00:00:00.000Z'),
   };
 }
 
-function makeService(overrides: {
-  locations?: LocationRow[];
-  fetchForecast?: jest.Mock;
-  upsertForecastDays?: jest.Mock;
-  recordRefreshSuccess?: jest.Mock;
-  recordRefreshFailure?: jest.Mock;
-  refreshConcurrency?: number;
-} = {}) {
+function makeService(
+  overrides: {
+    locations?: LocationRow[];
+    fetchForecast?: jest.Mock;
+    upsertForecastDays?: jest.Mock;
+    recordRefreshSuccess?: jest.Mock;
+    recordRefreshFailure?: jest.Mock;
+    refreshConcurrency?: number;
+    lockAcquired?: boolean;
+  } = {},
+) {
   const listTrackedLocations = jest
     .fn()
     .mockResolvedValue(overrides.locations ?? []);
@@ -48,6 +52,16 @@ function makeService(overrides: {
     overrides.recordRefreshSuccess ?? jest.fn().mockResolvedValue(undefined);
   const recordRefreshFailure =
     overrides.recordRefreshFailure ?? jest.fn().mockResolvedValue(undefined);
+  const lockAcquired = overrides.lockAcquired !== false;
+  const withAdvisoryLock = jest
+    .fn()
+    .mockImplementation(
+      async (_key: number, work: () => Promise<void>): Promise<boolean> => {
+        if (!lockAcquired) return false;
+        await work();
+        return true;
+      },
+    );
 
   const service = new RefreshService(
     { listTrackedLocations } as never,
@@ -62,6 +76,8 @@ function makeService(overrides: {
         return defaultValue;
       },
     } as ConfigService,
+    { withAdvisoryLock } as never,
+    { increment: jest.fn() } as never,
   );
 
   return {
@@ -71,6 +87,7 @@ function makeService(overrides: {
     upsertForecastDays,
     recordRefreshSuccess,
     recordRefreshFailure,
+    withAdvisoryLock,
   };
 }
 
@@ -104,15 +121,13 @@ describe('RefreshService.runCycle', () => {
     expect(recordRefreshFailure).not.toHaveBeenCalled();
   });
 
-  it('continues on partial failure, upserts successes, and records failure', async () => {
+  it('continues on partial failure, upserts successes, and records partial success', async () => {
     const a = location('loc-a', 1, 2);
     const b = location('loc-b', 3, 4);
-    const fetchForecast = jest
-      .fn()
-      .mockImplementation(async (lat: number) => {
-        if (lat === 3) throw new Error('provider down');
-        return [day];
-      });
+    const fetchForecast = jest.fn().mockImplementation((lat: number) => {
+      if (lat === 3) return Promise.reject(new Error('provider down'));
+      return Promise.resolve([day]);
+    });
     const {
       service,
       upsertForecastDays,
@@ -127,8 +142,23 @@ describe('RefreshService.runCycle', () => {
       'loc-b',
       expect.anything(),
     );
-    expect(recordRefreshFailure).toHaveBeenCalledTimes(1);
-    expect(recordRefreshFailure.mock.calls[0][0]).toMatch(/loc-b/);
+    expect(recordRefreshSuccess).toHaveBeenCalledTimes(1);
+    expect(recordRefreshSuccess).toHaveBeenCalledWith(
+      expect.stringMatching(/loc-b/),
+    );
+    expect(recordRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it('skips the cycle when the leadership lock is not acquired', async () => {
+    const a = location('loc-a', 1, 2);
+    const { service, fetchForecast, recordRefreshSuccess } = makeService({
+      locations: [a],
+      lockAcquired: false,
+    });
+
+    await service.runCycle();
+
+    expect(fetchForecast).not.toHaveBeenCalled();
     expect(recordRefreshSuccess).not.toHaveBeenCalled();
   });
 
@@ -158,8 +188,12 @@ describe('RefreshService.runCycle', () => {
   });
 
   it('records success when there are no tracked locations', async () => {
-    const { service, recordRefreshSuccess, recordRefreshFailure, fetchForecast } =
-      makeService({ locations: [] });
+    const {
+      service,
+      recordRefreshSuccess,
+      recordRefreshFailure,
+      fetchForecast,
+    } = makeService({ locations: [] });
 
     await service.runCycle();
 
@@ -208,7 +242,9 @@ describe('RefreshService.runCycle', () => {
 
     expect(upsertForecastDays).not.toHaveBeenCalled();
     expect(recordRefreshFailure).toHaveBeenCalledTimes(1);
-    expect(recordRefreshFailure.mock.calls[0][0]).toMatch(/empty forecast/);
+    expect(recordRefreshFailure).toHaveBeenCalledWith(
+      expect.stringMatching(/empty forecast/),
+    );
     expect(recordRefreshSuccess).not.toHaveBeenCalled();
   });
 });

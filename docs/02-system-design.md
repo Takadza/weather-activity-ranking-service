@@ -147,17 +147,21 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 
 ### ADR-005 — In-process cache now; Redis later
 
-- **Decision:** Short-TTL in-memory cache for hot locations on each API instance.
+- **Decision:** Short-TTL in-memory cache for hot locations on each API instance (`FORECAST_CACHE_TTL_MS`, default 60s). **Status: implemented.**
 - **Why:** Hot set ~500 KB (`01`); 6h data change rate; single/few replicas make shared cache optional.
 - **Rejected:** Redis in v1 (ops cost without proven need).
 - **Scale trigger:** Shared Redis when replica count causes stampede or uneven hit rates.
 
 ### ADR-006 — Refresh scheduling in-worker
 
-- **Decision:** `node-cron` / interval inside the worker process; `REFRESH_INTERVAL_MS` env config in milliseconds (FR-O2). Default `21600000` (6 hours).
-- **Why:** Simplest decoupled refresh; one worker avoids double-fetch.
+- **Decision:** Interval inside the worker process; `REFRESH_INTERVAL_MS` env config in milliseconds (FR-O2). Default `21600000` (6 hours). Cross-process leadership via `pg_try_advisory_lock`. **Status: implemented.**
+- **Why:** Simplest decoupled refresh; lock prevents double-fetch when scaled.
 - **Rejected:** External cron hitting an HTTP “refresh all” endpoint as the only mechanism (harder to bound concurrency).
-- **Scale trigger:** Advisory lock or queue if multiple workers are required.
+- **Scale trigger:** Queue if lock contention or multi-region workers are required.
+
+### DIP note (repositories)
+
+- Concrete Nest repository classes are injected directly (no port interfaces). Acceptable modular-monolith idiom at this size; introduce tokens/interfaces if a second store adapter appears.
 
 ---
 

@@ -5,6 +5,7 @@ export type LocationRow = {
   admin1: string | null;
   latitude: number;
   longitude: number;
+  tracked: boolean;
   createdAt: Date;
   updatedAt: Date;
 };

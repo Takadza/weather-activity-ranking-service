@@ -1,4 +1,5 @@
 import type { WeatherDay } from '../../src/scoring/types';
+import { ForecastCache } from '../../src/store/forecast-cache';
 import { ForecastsRepository } from '../../src/store/forecasts.repository';
 import { PrismaService } from '../../src/store/prisma.service';
 
@@ -25,7 +26,8 @@ function utcDateOffset(daysFromToday: number): string {
 
 describe('ForecastsRepository', () => {
   const prisma = new PrismaService();
-  const repository = new ForecastsRepository(prisma);
+  const forecastCache = new ForecastCache(60_000);
+  const repository = new ForecastsRepository(prisma, forecastCache);
   let locationId: string;
 
   beforeAll(async () => {
@@ -45,6 +47,7 @@ describe('ForecastsRepository', () => {
 
   beforeEach(async () => {
     await prisma.forecastDay.deleteMany({ where: { locationId } });
+    forecastCache.invalidate(locationId);
   });
 
   afterAll(async () => {
@@ -135,6 +138,71 @@ describe('ForecastsRepository', () => {
     expect(await repository.getForecastDays(locationId)).toEqual([
       weatherDay(future, 8),
     ]);
+  });
+
+  it('excludes past forecast dates on warm reads without requiring a write', async () => {
+    const past = utcDateOffset(-1);
+    const today = utcDateOffset(0);
+    const future = utcDateOffset(1);
+
+    await prisma.forecastDay.createMany({
+      data: [
+        {
+          locationId,
+          forecastDate: new Date(`${past}T00:00:00.000Z`),
+          tempMaxC: 1,
+          fetchedAt: new Date(),
+        },
+        {
+          locationId,
+          forecastDate: new Date(`${today}T00:00:00.000Z`),
+          tempMaxC: 2,
+          tempMinC: 2,
+          precipMm: 1,
+          precipProbPct: 20,
+          windMaxKmh: 15,
+          snowfallCm: 0,
+          waveHeightM: 1.2,
+          weatherCode: 2,
+          fetchedAt: new Date(),
+        },
+        {
+          locationId,
+          forecastDate: new Date(`${future}T00:00:00.000Z`),
+          tempMaxC: 3,
+          tempMinC: 2,
+          precipMm: 1,
+          precipProbPct: 20,
+          windMaxKmh: 15,
+          snowfallCm: 0,
+          waveHeightM: 1.2,
+          weatherCode: 2,
+          fetchedAt: new Date(),
+        },
+      ],
+    });
+
+    const stored = await repository.getForecastDays(locationId);
+    expect(stored.map((d) => d.date)).toEqual([today, future]);
+    expect(stored.map((d) => d.date)).not.toContain(past);
+  });
+
+  it('persists rawJson on upsert', async () => {
+    const date = utcDateOffset(1);
+    const day = {
+      ...weatherDay(date, 10),
+      raw: { provider: 'open-meteo', date, temperature_2m_max: 10 },
+    };
+    await repository.upsertForecastDays(locationId, [day]);
+
+    const row = await prisma.forecastDay.findFirst({
+      where: { locationId, forecastDate: new Date(`${date}T00:00:00.000Z`) },
+    });
+    expect(row?.rawJson).toEqual({
+      provider: 'open-meteo',
+      date,
+      temperature_2m_max: 10,
+    });
   });
 
   it('leaves existing forecasts unchanged when given no days', async () => {

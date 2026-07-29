@@ -4,6 +4,7 @@ title Modular monolith — internal modules
 
 package "Activity Ranking Service" {
   [graphql] as GQL
+  [activity-ranking] as Rank
   [scoring] as Score
   [store] as Store
   [refresh] as Refresh
@@ -14,25 +15,27 @@ package "Activity Ranking Service" {
 database "PostgreSQL" as PG
 cloud "Open-Meteo" as OM
 
-GQL --> Store : load location + forecast days
-GQL --> Score : pure functions (no I/O)
-GQL --> Geo : resolve name → candidates
+GQL --> Rank : resolve query
+Rank --> Store : load location + forecast days
+Rank --> Score : pure functions (no I/O)
+Rank --> Geo : resolve name → candidates
+Rank --> OMClient : cold-start forecast
 Geo --> Store : geocode cache hit/miss
 Geo --> OMClient : miss → geocode API
 Refresh --> Store : list tracked locations\nidempotent upserts
 Refresh --> OMClient : forecast fetch
-Refresh --> Score : compute-on-read\n(no score table in v1)
 OMClient --> OM : HTTP
 Store --> PG : SQL via Prisma
 
 note right of Score
   Deterministic, versioned rubric.
+  Compute-on-read (no score table).
   Unit-testable without DB or HTTP.
 end note
 
 note right of GQL
-  In-process: function calls.
-  No network between modules.
+  Transport only; maps domain errors.
+  In-process function calls.
 end note
 
 @enduml

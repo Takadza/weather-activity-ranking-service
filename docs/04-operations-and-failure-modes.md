@@ -59,7 +59,14 @@ Hot-path rule: **do not** call Open-Meteo when forecast rows exist—even if sta
 
 ## 4. Health & observability
 
-### 4.1 `GET /health`
+### 4.1 Health probes
+
+| Endpoint | Role |
+|---|---|
+| `GET /health/live` | Liveness (no DB) |
+| `GET /health/ready` | Readiness; **503** when `status: "degraded"` |
+| `GET /health` | Compatibility probe (same JSON as ready, always HTTP 200) |
+| GraphQL `health` | Same payload as HTTP health |
 
 JSON roughly:
 
@@ -75,27 +82,26 @@ JSON roughly:
 }
 ```
 
-- `status: "degraded"` if last success older than `STALE_AFTER_SECONDS` *and* locations are tracked (or last error recent)
-- Orchestrators may use liveness separately from “refresh freshness” if needed; v1 can keep one endpoint with clear fields
+- `status: "degraded"` if tracked locations exist and last success is older than `STALE_AFTER_SECONDS` (or never succeeded)
+- Partial refresh failures may set `lastError` while still advancing `lastSuccessAt`; that alone does **not** force degraded
 
 ### 4.2 Logs (structured JSON)
 
+- Production uses JSON Nest logger; `LOG_LEVEL` controls verbosity
 - Refresh cycle start/end, per-location success/fail
 - Open-Meteo errors and circuit transitions
-- Cold-start events (count carefully—cost/rate)
+- Cold-start events (bounded by `COLD_START_MAX_CONCURRENT`)
 
-### 4.3 Metrics (minimal set)
+### 4.3 Metrics (process-local Prometheus text)
 
-| Metric | Why |
-|---|---|
-| `refresh_success_total` / `refresh_fail_total` | FR-O4/O5 |
-| `open_meteo_latency_ms` | Provider risk |
-| `open_meteo_errors_total` | Circuit / rate issues |
-| `graphql_request_duration_ms` | Read SLO |
-| `cache_hit_ratio` or hits/misses | `01` cache NFR |
-| `forecast_data_age_seconds` (histogram/gauge) | Freshness |
+Counters are **in-process** (no shared store):
 
-Expose via Prometheus-style endpoint or log-based metrics in v1—pick one in implementation and document in README. Prefer a simple `/metrics` if time allows; otherwise structured logs alone with a README note (deliberate cut).
+| Process | Endpoint | Metrics |
+|---|---|---|
+| API | `GET /metrics` (port 3000) | `cold_starts_total`, `cold_start_rejects_total`, `provider_errors_total` |
+| Worker | `GET /metrics` (port `WORKER_METRICS_PORT`, default 3001) | `refresh_cycles_total`, `refresh_location_failures_total` |
+
+Scrape both processes in production.
 
 ---
 

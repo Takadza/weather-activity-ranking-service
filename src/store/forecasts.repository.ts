@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import type { WeatherDay } from '../scoring/types';
+import { ForecastCache } from './forecast-cache';
 import { PrismaService } from './prisma.service';
 import type { ForecastMeta } from './types';
+
+/** Weather day plus optional provider raw payload for FR-S1 persistence. */
+export type ForecastDayWrite = WeatherDay & { raw?: unknown };
 
 const FORECAST_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -22,13 +26,25 @@ function startOfUtcDay(date = new Date()): Date {
   );
 }
 
+function dayRawJson(day: ForecastDayWrite): object {
+  if (day.raw != null && typeof day.raw === 'object') {
+    return day.raw;
+  }
+  const { raw, ...fields } = day;
+  void raw;
+  return fields;
+}
+
 @Injectable()
 export class ForecastsRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly forecastCache: ForecastCache,
+  ) {}
 
   async upsertForecastDays(
     locationId: string,
-    days: WeatherDay[],
+    days: ForecastDayWrite[],
   ): Promise<void> {
     // Empty payload is a no-op so a bad/empty provider response cannot wipe
     // last-known-good forecasts (stale-over-empty). Use an explicit clear API
@@ -82,6 +98,7 @@ export class ForecastsRepository {
           snowfallCm: day.snowfallCm,
           waveHeightM: day.waveHeightM,
           weatherCode: day.weatherCode,
+          rawJson: dayRawJson(day),
           fetchedAt,
         };
 
@@ -98,15 +115,23 @@ export class ForecastsRepository {
         });
       }
     });
+
+    this.forecastCache.invalidate(locationId);
   }
 
   async getForecastDays(locationId: string): Promise<WeatherDay[]> {
+    const cached = this.forecastCache.get(locationId);
+    if (cached) {
+      return cached.days;
+    }
+
+    const today = startOfUtcDay();
     const days = await this.prisma.forecastDay.findMany({
-      where: { locationId },
+      where: { locationId, forecastDate: { gte: today } },
       orderBy: { forecastDate: 'asc' },
     });
 
-    return days.map((day) => ({
+    const mapped = days.map((day) => ({
       date: day.forecastDate.toISOString().slice(0, 10),
       tempMaxC: day.tempMaxC,
       tempMinC: day.tempMinC,
@@ -117,9 +142,25 @@ export class ForecastsRepository {
       waveHeightM: day.waveHeightM,
       weatherCode: day.weatherCode,
     }));
+
+    if (mapped.length > 0) {
+      const meta = await this.getForecastMetaUncached(locationId);
+      this.forecastCache.set(locationId, mapped, meta);
+    }
+    return mapped;
   }
 
   async getForecastMeta(locationId: string): Promise<ForecastMeta> {
+    const cached = this.forecastCache.get(locationId);
+    if (cached) {
+      return cached.meta;
+    }
+    return this.getForecastMetaUncached(locationId);
+  }
+
+  private async getForecastMetaUncached(
+    locationId: string,
+  ): Promise<ForecastMeta> {
     const latest = await this.prisma.forecastDay.findFirst({
       where: { locationId },
       orderBy: { fetchedAt: 'desc' },

@@ -15,12 +15,21 @@ export type ResolveLocationResult = {
   alternatives: LocationRow[];
 };
 
+export type FindOrCreateLocationOptions = {
+  tracked?: boolean;
+};
+
 export type ResolveLocationDeps = {
   geocode(name: string): Promise<GeocodeResult[]>;
   findGeocodeCache(queryNormalized: string): Promise<GeocodeCacheRow | null>;
   upsertGeocodeCache(input: GeocodeCacheInput): Promise<GeocodeCacheRow>;
-  findOrCreateLocation(input: LocationInput): Promise<LocationRow>;
+  findOrCreateLocation(
+    input: LocationInput,
+    options?: FindOrCreateLocationOptions,
+  ): Promise<LocationRow>;
   now?: () => Date;
+  /** Geocode cache TTL in seconds; 0 disables expiry. Default 604800 (7d). */
+  geocodeCacheTtlSeconds?: number;
 };
 
 /** In-flight cache-miss resolves, keyed by normalized query (process-local). */
@@ -70,6 +79,17 @@ function assertValidCoordinates(latitude: number, longitude: number): void {
   }
 }
 
+function isCacheFresh(
+  cache: GeocodeCacheRow,
+  deps: ResolveLocationDeps,
+): boolean {
+  const ttlSeconds = deps.geocodeCacheTtlSeconds ?? 604_800;
+  if (ttlSeconds <= 0) return true;
+  const now = (deps.now ?? (() => new Date()))().getTime();
+  const ageSeconds = (now - cache.fetchedAt.getTime()) / 1000;
+  return ageSeconds <= ttlSeconds;
+}
+
 async function mapCandidatesToLocations(
   candidates: GeocodeResult[],
   deps: ResolveLocationDeps,
@@ -79,7 +99,9 @@ async function mapCandidatesToLocations(
   }
 
   const locations = await Promise.all(
-    candidates.map((candidate) => deps.findOrCreateLocation(candidate)),
+    candidates.map((candidate, index) =>
+      deps.findOrCreateLocation(candidate, { tracked: index === 0 }),
+    ),
   );
 
   return { location: locations[0], alternatives: locations.slice(1) };
@@ -98,7 +120,7 @@ async function resolveCacheMiss(
   const pending = (async (): Promise<ResolveLocationResult> => {
     // Another waiter may have populated the cache while we queued.
     const raced = await deps.findGeocodeCache(queryNormalized);
-    if (raced) {
+    if (raced && isCacheFresh(raced, deps)) {
       return mapCandidatesToLocations(candidatesFromCache(raced), deps);
     }
 
@@ -131,11 +153,14 @@ export async function resolveLocationInput(
 
   if (hasCoordinates) {
     assertValidCoordinates(input.latitude!, input.longitude!);
-    const location = await deps.findOrCreateLocation({
-      name: trimmedName || `${input.latitude},${input.longitude}`,
-      latitude: input.latitude!,
-      longitude: input.longitude!,
-    });
+    const location = await deps.findOrCreateLocation(
+      {
+        name: trimmedName || `${input.latitude},${input.longitude}`,
+        latitude: input.latitude!,
+        longitude: input.longitude!,
+      },
+      { tracked: true },
+    );
     return { location, alternatives: [] };
   }
 
@@ -145,7 +170,7 @@ export async function resolveLocationInput(
 
   const queryNormalized = trimmedName.toLowerCase();
   const cache = await deps.findGeocodeCache(queryNormalized);
-  if (cache) {
+  if (cache && isCacheFresh(cache, deps)) {
     return mapCandidatesToLocations(candidatesFromCache(cache), deps);
   }
 

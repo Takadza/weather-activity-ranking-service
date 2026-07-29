@@ -19,7 +19,9 @@ export type ReasonCode =
   | 'TOO_BIG'
   | 'TOO_HOT'
   | 'HEAVY_RAIN'
-  | 'BAD_WEATHER';
+  | 'BAD_WEATHER'
+  | 'GOOD_OUTDOOR_WEATHER'
+  | 'POOR_OUTDOOR_WEATHER';
 
 export type WeatherDay = {
   date: string;
@@ -31,6 +33,8 @@ export type WeatherDay = {
   snowfallCm: number | null;
   waveHeightM: number | null;
   weatherCode: number | null;
+  /** Optional provider raw slice for persistence (ignored by scoring). */
+  raw?: unknown;
 };
 
 export type DayScore = {

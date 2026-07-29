@@ -4,8 +4,12 @@ import request from 'supertest';
 import { AppModule } from '../../src/app.module';
 import { OpenMeteoClient } from '../../src/open-meteo/client';
 import type { WeatherDay } from '../../src/scoring/types';
+import { ForecastCache } from '../../src/store/forecast-cache';
 import { ForecastsRepository } from '../../src/store/forecasts.repository';
-import { LocationsRepository } from '../../src/store/locations.repository';
+import {
+  LocationsRepository,
+  roundCoordinate,
+} from '../../src/store/locations.repository';
 import { PrismaService } from '../../src/store/prisma.service';
 
 const WARM_LAT = 41.111111;
@@ -14,6 +18,13 @@ const COLD_LAT = 42.222222;
 const COLD_LON = -72.222222;
 const FAIL_LAT = 43.333333;
 const FAIL_LON = -73.333333;
+const WARM_LAT_R = roundCoordinate(WARM_LAT);
+const WARM_LON_R = roundCoordinate(WARM_LON);
+const COLD_LAT_R = roundCoordinate(COLD_LAT);
+const COLD_LON_R = roundCoordinate(COLD_LON);
+const FAIL_LAT_R = roundCoordinate(FAIL_LAT);
+const FAIL_LON_R = roundCoordinate(FAIL_LON);
+const TEST_LATS = [WARM_LAT_R, COLD_LAT_R, FAIL_LAT_R];
 
 function weatherDay(date: string, tempMaxC: number): WeatherDay {
   return {
@@ -37,7 +48,9 @@ function utcDateOffset(daysFromToday: number): string {
 }
 
 function sevenDays(): WeatherDay[] {
-  return Array.from({ length: 7 }, (_, i) => weatherDay(utcDateOffset(i), 10 + i));
+  return Array.from({ length: 7 }, (_, i) =>
+    weatherDay(utcDateOffset(i), 10 + i),
+  );
 }
 
 const RANKING_QUERY = `
@@ -59,6 +72,7 @@ describe('GraphQL activityRanking', () => {
   let prisma: PrismaService;
   let locations: LocationsRepository;
   let forecasts: ForecastsRepository;
+  let forecastCache: ForecastCache;
   const openMeteo = {
     fetchForecast: jest.fn(),
     geocode: jest.fn(),
@@ -82,21 +96,29 @@ describe('GraphQL activityRanking', () => {
     prisma = moduleRef.get(PrismaService);
     locations = moduleRef.get(LocationsRepository);
     forecasts = moduleRef.get(ForecastsRepository);
+    forecastCache = moduleRef.get(ForecastCache);
   });
 
   beforeEach(async () => {
     openMeteo.fetchForecast.mockReset();
     openMeteo.geocode.mockReset();
+    const leftover = await prisma.location.findMany({
+      where: { latitude: { in: TEST_LATS } },
+      select: { id: true },
+    });
+    for (const row of leftover) {
+      forecastCache.invalidate(row.id);
+    }
     await prisma.forecastDay.deleteMany({
       where: {
         location: {
-          latitude: { in: [WARM_LAT, COLD_LAT, FAIL_LAT] },
+          latitude: { in: TEST_LATS },
         },
       },
     });
     await prisma.location.deleteMany({
       where: {
-        latitude: { in: [WARM_LAT, COLD_LAT, FAIL_LAT] },
+        latitude: { in: TEST_LATS },
       },
     });
   });
@@ -105,13 +127,13 @@ describe('GraphQL activityRanking', () => {
     await prisma.forecastDay.deleteMany({
       where: {
         location: {
-          latitude: { in: [WARM_LAT, COLD_LAT, FAIL_LAT] },
+          latitude: { in: TEST_LATS },
         },
       },
     });
     await prisma.location.deleteMany({
       where: {
-        latitude: { in: [WARM_LAT, COLD_LAT, FAIL_LAT] },
+        latitude: { in: TEST_LATS },
       },
     });
     await app.close();
@@ -142,7 +164,7 @@ describe('GraphQL activityRanking', () => {
     expect(payload.lastUpdated).toBeTruthy();
     expect(typeof payload.dataAgeSeconds).toBe('number');
     expect(typeof payload.stale).toBe('boolean');
-    expect(payload.location.latitude).toBe(WARM_LAT);
+    expect(payload.location.latitude).toBe(roundCoordinate(WARM_LAT));
     expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
     expect(openMeteo.geocode).not.toHaveBeenCalled();
   });
@@ -166,8 +188,8 @@ describe('GraphQL activityRanking', () => {
     expect(payload.rubricVersion).toBe('2026-07-28.1');
     expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
     expect(openMeteo.fetchForecast).toHaveBeenCalledWith(
-      COLD_LAT,
-      COLD_LON,
+      roundCoordinate(COLD_LAT),
+      roundCoordinate(COLD_LON),
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
 

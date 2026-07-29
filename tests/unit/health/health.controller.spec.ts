@@ -4,7 +4,7 @@ import request from 'supertest';
 import { HealthController } from '../../../src/health/health.controller';
 import { HealthService } from '../../../src/health/health.service';
 
-describe('HealthController GET /health', () => {
+describe('HealthController', () => {
   let app: INestApplication;
   let getHealth: jest.Mock;
 
@@ -24,7 +24,15 @@ describe('HealthController GET /health', () => {
     await app.close();
   });
 
-  it('returns 200 with health JSON payload', async () => {
+  it('GET /health/live returns 200 without calling HealthService', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/health/live')
+      .expect(200);
+    expect(res.body).toEqual({ status: 'ok' });
+    expect(getHealth).not.toHaveBeenCalled();
+  });
+
+  it('GET /health returns 200 with health JSON payload', async () => {
     const payload = {
       status: 'ok' as const,
       refresh: {
@@ -40,6 +48,20 @@ describe('HealthController GET /health', () => {
 
     expect(res.body).toEqual(payload);
     expect(getHealth).toHaveBeenCalledTimes(1);
+  });
+
+  it('GET /health/ready returns 503 when degraded', async () => {
+    getHealth.mockResolvedValue({
+      status: 'degraded',
+      refresh: {
+        lastSuccessAt: null,
+        lastAttemptAt: null,
+        lastError: null,
+        trackedLocationCount: 1,
+      },
+    });
+
+    await request(app.getHttpServer()).get('/health/ready').expect(503);
   });
 
   it('returns 500 when the health service fails (e.g. DB unavailable)', async () => {

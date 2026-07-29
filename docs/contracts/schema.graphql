@@ -11,6 +11,22 @@ enum ActivityType {
   INDOOR_SIGHTSEEING
 }
 
+enum ReasonCode {
+  MISSING_TEMP
+  TOO_WARM
+  TOO_COLD
+  NO_SNOW
+  HIGH_WIND
+  NO_MARINE_DATA
+  FLAT
+  TOO_BIG
+  TOO_HOT
+  HEAVY_RAIN
+  BAD_WEATHER
+  GOOD_OUTDOOR_WEATHER
+  POOR_OUTDOOR_WEATHER
+}
+
 input LocationInput {
   """City or town name. If both name and coordinates are set, coordinates win."""
   name: String
@@ -33,7 +49,7 @@ type DailyActivityScore {
   """0–100; null if N/A for this activity/day."""
   score: Float
   available: Boolean!
-  reasonCodes: [String!]!
+  reasonCodes: [ReasonCode!]!
 }
 
 type ActivityRanking {

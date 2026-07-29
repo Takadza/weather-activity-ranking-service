@@ -106,7 +106,7 @@ Worker: same image, command override e.g. `node dist/worker.js`.
 | `api` | GraphQL + health; depends on healthy `db`; runs migrations on start |
 | `worker` | Refresh loop; same image; depends on `db` |
 
-Env from `.env` / Compose `environment`. Publish `api` on `4000` (or similar).
+Env from `.env` / Compose `environment`. Publish `api` on `3000`.
 
 **v1 scale story:** Compose runs one `api`. Production scale = more API tasks behind a platform LB (see `02`)—Compose file need not define the LB.
 

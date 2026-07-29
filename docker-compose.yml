@@ -22,12 +22,17 @@ services:
     environment: &app_env
       DATABASE_URL: postgresql://wars:wars@db:5432/wars?schema=public
       PORT: "3000"
+      WORKER_METRICS_PORT: "3001"
       REFRESH_INTERVAL_MS: "21600000"
       REFRESH_CONCURRENCY: "5"
       OPEN_METEO_TIMEOUT_MS: "5000"
       COLD_START_TIMEOUT_MS: "3000"
+      COLD_START_MAX_CONCURRENT: "10"
       STALE_AFTER_SECONDS: "21600"
+      GEOCODE_CACHE_TTL_SECONDS: "604800"
+      FORECAST_CACHE_TTL_MS: "60000"
       LOG_LEVEL: info
+      NODE_ENV: production
     depends_on:
       db:
         condition: service_healthy
@@ -38,7 +43,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3000/health/live').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 5s
@@ -47,14 +52,15 @@ services:
 
   worker:
     build: .
+    ports:
+      - "3001:3001"
     environment:
       <<: *app_env
     depends_on:
       db:
         condition: service_healthy
-      api:
-        condition: service_healthy
-    command: ["node", "dist/worker.js"]
+    # Migrate is idempotent; avoids racing schema before API finishes deploy.
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/worker.js"]
 
 volumes:
   wars_pg:

@@ -87,15 +87,6 @@ export class HealthService {
       return 'degraded';
     }
 
-    if (input.lastError != null && input.lastAttemptAt != null) {
-      const attemptAgeSeconds = Math.floor(
-        (input.now - input.lastAttemptAt.getTime()) / 1000,
-      );
-      if (attemptAgeSeconds <= input.staleAfterSeconds) {
-        return 'degraded';
-      }
-    }
-
     return 'ok';
   }
 }

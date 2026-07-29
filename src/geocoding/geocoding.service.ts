@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OpenMeteoClient } from '../open-meteo/client';
 import { GeocodeCacheRepository } from '../store/geocode-cache.repository';
 import { LocationsRepository } from '../store/locations.repository';
@@ -14,6 +15,7 @@ export class GeocodingService {
     private readonly openMeteo: OpenMeteoClient,
     private readonly locations: LocationsRepository,
     private readonly geocodeCache: GeocodeCacheRepository,
+    private readonly config: ConfigService,
   ) {}
 
   resolve(input: ResolveLocationInput): Promise<ResolveLocationResult> {
@@ -23,8 +25,12 @@ export class GeocodingService {
         this.geocodeCache.findGeocodeCacheByQuery(queryNormalized),
       upsertGeocodeCache: (cacheInput) =>
         this.geocodeCache.upsertGeocodeCache(cacheInput),
-      findOrCreateLocation: (locationInput) =>
-        this.locations.findOrCreateLocation(locationInput),
+      findOrCreateLocation: (locationInput, options) =>
+        this.locations.findOrCreateLocation(locationInput, options),
+      geocodeCacheTtlSeconds: this.config.get<number>(
+        'geocodeCacheTtlSeconds',
+        604_800,
+      ),
     });
   }
 }

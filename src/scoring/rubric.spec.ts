@@ -129,7 +129,22 @@ describe('scoreDay indoor', () => {
     const outdoor = scoreDay('OUTDOOR_SIGHTSEEING', stormy);
     expect(indoor.available).toBe(true);
     expect(indoor.score).toBe(90);
+    expect(indoor.reasonCodes).toEqual(['POOR_OUTDOOR_WEATHER']);
     expect(outdoor.score).toBe(0);
     expect(indoor.score!).toBeGreaterThan(outdoor.score!);
+  });
+
+  it('emits GOOD_OUTDOOR_WEATHER when outdoor conditions are pleasant', () => {
+    const pleasant = {
+      ...base,
+      tempMaxC: 22,
+      precipMm: 0,
+      precipProbPct: 5,
+      windMaxKmh: 10,
+      snowfallCm: 0,
+      weatherCode: 1,
+    };
+    const indoor = scoreDay('INDOOR_SIGHTSEEING', pleasant);
+    expect(indoor.reasonCodes).toEqual(['GOOD_OUTDOOR_WEATHER']);
   });
 });

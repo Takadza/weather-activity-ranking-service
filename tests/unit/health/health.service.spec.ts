@@ -4,9 +4,7 @@ import type { RefreshMetaRow } from '../../../src/store/types';
 
 const STALE_AFTER = 21600;
 
-function meta(
-  overrides: Partial<RefreshMetaRow> = {},
-): RefreshMetaRow {
+function meta(overrides: Partial<RefreshMetaRow> = {}): RefreshMetaRow {
   return {
     id: 1,
     lastSuccessAt: null,
@@ -16,12 +14,14 @@ function meta(
   };
 }
 
-function makeService(overrides: {
-  refreshMeta?: RefreshMetaRow;
-  trackedLocationCount?: number;
-  staleAfterSeconds?: number;
-  now?: Date;
-} = {}) {
+function makeService(
+  overrides: {
+    refreshMeta?: RefreshMetaRow;
+    trackedLocationCount?: number;
+    staleAfterSeconds?: number;
+    now?: Date;
+  } = {},
+) {
   const getRefreshMeta = jest
     .fn()
     .mockResolvedValue(overrides.refreshMeta ?? meta());
@@ -83,9 +83,7 @@ describe('HealthService.getHealth', () => {
 
   it('returns degraded when tracked and lastSuccessAt is older than threshold', async () => {
     const now = new Date('2026-07-29T12:00:00.000Z');
-    const lastSuccessAt = new Date(
-      now.getTime() - (STALE_AFTER + 1) * 1000,
-    );
+    const lastSuccessAt = new Date(now.getTime() - (STALE_AFTER + 1) * 1000);
     const { service } = makeService({
       trackedLocationCount: 1,
       now,
@@ -101,7 +99,7 @@ describe('HealthService.getHealth', () => {
     expect(result.refresh.lastSuccessAt).toBe(lastSuccessAt.toISOString());
   });
 
-  it('returns degraded when tracked, lastError set, and lastAttemptAt within threshold', async () => {
+  it('returns ok when tracked, success fresh, even with a recent partial lastError', async () => {
     const now = new Date('2026-07-29T12:00:00.000Z');
     const lastSuccessAt = new Date(now.getTime() - 60 * 1000);
     const lastAttemptAt = new Date(now.getTime() - 30 * 1000);
@@ -111,14 +109,14 @@ describe('HealthService.getHealth', () => {
       refreshMeta: meta({
         lastSuccessAt,
         lastAttemptAt,
-        lastError: 'provider down',
+        lastError: 'loc-b: provider down',
       }),
     });
 
     const result = await service.getHealth();
 
-    expect(result.status).toBe('degraded');
-    expect(result.refresh.lastError).toBe('provider down');
+    expect(result.status).toBe('ok');
+    expect(result.refresh.lastError).toBe('loc-b: provider down');
     expect(result.refresh.lastAttemptAt).toBe(lastAttemptAt.toISOString());
   });
 

@@ -38,7 +38,7 @@ Treat `stale: true` as usable last-known-good data, not a hard failure.
 ## Example request
 
 ```bash
-curl -s http://localhost:4000/graphql \
+curl -s http://localhost:3000/graphql \
   -H 'content-type: application/json' \
   -d '{"query":"query($location: LocationInput!){ activityRanking(location:$location){ location{name} stale rankings{activity overallScore rank} } }","variables":{"location":{"name":"Cape Town"}}}'
 ```
