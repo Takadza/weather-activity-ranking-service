@@ -1,6 +1,6 @@
 @startuml seq-ambiguous-geocode
 !theme plain
-title Sequence — Ambiguous place name (FR-U3)
+title Sequence - Ambiguous place name (FR-U3)
 
 actor Client
 participant "GraphQL\nAPI" as GQL

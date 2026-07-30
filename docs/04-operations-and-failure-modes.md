@@ -1,6 +1,6 @@
-# 04 — Operations & Failure Modes
+# 04 - Operations & Failure Modes
 
-**Stage 2 of 5 (Design) — refresh, resilience, observability, deliberate cuts**
+**Stage 2 of 5 (Design) - refresh, resilience, observability, deliberate cuts**
 
 Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation.md), [`02-system-design.md`](02-system-design.md), [`03-api-and-domain-design.md`](03-api-and-domain-design.md).
 
@@ -10,7 +10,7 @@ Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation
 
 | Setting | Default | Notes |
 |---|---|---|
-| `REFRESH_INTERVAL_MS` | `21600000` (6h) | FR-O2 — milliseconds; config, not a hardcoded constant |
+| `REFRESH_INTERVAL_MS` | `21600000` (6h) | FR-O2 - milliseconds; config, not a hardcoded constant |
 | `REFRESH_CONCURRENCY` | `5` | Bound parallel Open-Meteo calls |
 | `OPEN_METEO_TIMEOUT_MS` | `5000` | Per-request timeout |
 | `COLD_START_TIMEOUT_MS` | `3000` | Aligns with < 3s cold-start NFR |
@@ -33,12 +33,12 @@ See rendered sequence in [`02` §2.1](02-system-design.md#scheduled-refresh) ([S
 
 | Control | Spec |
 |---|---|
-| Retry | Transient 5xx / network errors — exponential backoff with jitter; capped attempts (e.g. 3) |
+| Retry | Transient 5xx / network errors - exponential backoff with jitter; capped attempts (e.g. 3) |
 | Circuit breaker | Open after consecutive failures threshold; fail fast; half-open probe after cool-down |
 | Rate citizenship | Concurrency + interval; no thundering herd on cold-start bursts (queue or limit concurrent cold-starts) |
 | Logging | Structured: `locationId`, latency, status, attempt, circuit state (FR-O5) |
 
-Hot-path rule: **do not** call Open-Meteo when forecast rows exist—even if stale. Stale flagged data beats an outage (`01` Availability).
+Hot-path rule: **do not** call Open-Meteo when forecast rows exist - even if stale. Stale flagged data beats an outage (`01` Availability).
 
 ---
 
@@ -65,7 +65,7 @@ Hot-path rule: **do not** call Open-Meteo when forecast rows exist—even if sta
 |---|---|
 | `GET /health/live` | Liveness (no DB) |
 | `GET /health/ready` | Readiness; **503** when `status: "degraded"` or DB unavailable (`status: "unavailable"`) |
-| `GET /health` | Compatibility probe: same JSON as `/health/ready` for ok/degraded with HTTP 200; may **500** if DB/probe throws — prefer `/health/live` and `/health/ready` |
+| `GET /health` | Compatibility probe: same JSON as `/health/ready` for ok/degraded with HTTP 200; may **500** if DB/probe throws - prefer `/health/live` and `/health/ready` |
 | GraphQL `health` | Same payload as HTTP health (counts toward GraphQL throttle) |
 | Worker `GET /health/live` | Liveness on `WORKER_METRICS_PORT` (default 3001) |
 
@@ -86,6 +86,15 @@ JSON roughly:
 - `status: "degraded"` if tracked locations exist and last success is older than `STALE_AFTER_SECONDS` (or never succeeded)
 - Partial refresh failures may set `lastError` while still advancing `lastSuccessAt`; that alone does **not** force degraded
 
+**Example timelines**
+
+| Scenario | `trackedLocationCount` | `lastSuccessAt` | `lastError` | `status` | `/health/ready` |
+|---|---|---|---|---|---|
+| Fresh deploy, no tracked locations yet | 0 | null | null | `ok` | 200 |
+| Tracked locations exist, refresh never succeeded | 5 | null | `"loc-1: timeout"` | `degraded` | 503 |
+| Partial refresh: 4/5 locations OK, recent success | 5 | 10 minutes ago | `"loc-1: empty forecast"` | `ok` | 200 |
+| Last success older than `STALE_AFTER_SECONDS` | 5 | 8 hours ago | null | `degraded` | 503 |
+
 ### 4.2 Logs (structured JSON)
 
 - Production uses JSON Nest logger; `LOG_LEVEL` controls verbosity
@@ -103,7 +112,7 @@ Counters are **in-process** (no shared store):
 | API | `GET /metrics` (port 3000) | `cold_starts_total`, `cold_start_rejects_total`, `provider_errors_total` |
 | Worker | `GET /metrics` (port `WORKER_METRICS_PORT`, default 3001) | `refresh_cycles_total`, `refresh_location_failures_total` |
 
-When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. **Required when `NODE_ENV=production`.** `/health` and `/health/ready` omit `lastError` unless the same metrics token is presented. Rotate `API_KEY` / `METRICS_TOKEN` periodically; prefer scraping worker metrics on loopback or a private network (TLS at the edge/mesh — the worker HTTP server itself is cleartext by design).
+When `METRICS_TOKEN` is set, scrapers must send `Authorization: Bearer <token>` or `X-Metrics-Token: <token>`. **Required when `NODE_ENV=production`.** `/health` and `/health/ready` omit `lastError` unless the same metrics token is presented. Rotate `API_KEY` / `METRICS_TOKEN` periodically; prefer scraping worker metrics on loopback or a private network (TLS at the edge/mesh - the worker HTTP server itself is cleartext by design).
 
 Scrape both processes in production.
 
@@ -113,7 +122,7 @@ Scrape both processes in production.
 - Applies to GraphQL and HTTP; `/health/live` and `/metrics` are skipped (GraphQL `health` still counts; `/health` and `/health/ready` are throttled)
 - On GraphQL, over-limit requests surface as a GraphQL error (`Too Many Requests`) rather than a bare HTTP 429
 - When `REDIS_URL` is set, limits are shared across API replicas; **required in production**
-- Behind a reverse proxy/LB, set `TRUST_PROXY=1` (or hop count) so client IP for throttling is taken from `X-Forwarded-For` correctly — leave unset for direct Compose/port exposure
+- Behind a reverse proxy/LB, set `TRUST_PROXY=1` (or hop count) so client IP for throttling is taken from `X-Forwarded-For` correctly - leave unset for direct Compose/port exposure
 
 ---
 
@@ -121,19 +130,21 @@ Scrape both processes in production.
 
 - No PII collection
 - Validate `LocationInput` (name length cap, finite lat/lon ranges)
-- Parameterised queries only (Prisma) — never use `$queryRawUnsafe` / `$executeRawUnsafe`
+- Parameterised queries only (Prisma) - never use `$queryRawUnsafe` / `$executeRawUnsafe`
 - Shared `API_KEY` for GraphQL/HTTP (except `/health/live` and `/metrics`)
 - Helmet security headers on the API; CORS only when `ALLOWED_ORIGINS` is non-empty
 - Client rate limiting (see §4.4); `METRICS_TOKEN` for scrape endpoints and detailed health
 - Tracked locations: named geocode primary only, capped by `MAX_TRACKED_LOCATIONS` (coords never auto-track)
 - Secrets only via env (see `05`); never commit `.env` / `.env.production` (gitignore covers `.env.*` except `.env.example`)
 - Manual verification: Postman collection at [`../postman/weather-activity-ranking.postman_collection.json`](../postman/weather-activity-ranking.postman_collection.json) (API key + multi-city/coords/negative cases)
+- **Key rotation (v1):** rotate `API_KEY` and `METRICS_TOKEN` by updating env and redeploying/restarting processes; no in-app rotation endpoint
+- **GraphQL introspection (local):** set `INTROSPECTION=true` to explore the schema; default is off in production ([`src/config/env.validation.ts`](../src/config/env.validation.ts))
 
 ---
 
 ## 6. Deliberate cuts
 
-Documented for reviewers—focused submission beats exhaustive (`01` + brief).
+Documented for reviewers - focused submission beats exhaustive (`01` + brief).
 
 | Cut | Why |
 |---|---|
@@ -162,6 +173,6 @@ Documented for reviewers—focused submission beats exhaustive (`01` + brief).
 
 ## 8. Next
 
-→ [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md) — GitHub Actions, Docker, delivery posture.
+→ [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md) - GitHub Actions, Docker, delivery posture.
 
 Doc index: [`README.md`](README.md).

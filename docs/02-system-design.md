@@ -1,4 +1,4 @@
-# 02 — System Design (HLD, Scale, Technology ADRs)
+# 02 - System Design (HLD, Scale, Technology ADRs)
 
 **Stage 2 of 5: Clarify → Design → Implementation notes → Code → Review**
 
@@ -19,7 +19,7 @@ Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation
 
 ## 2. High-level architecture
 
-**Style: NestJS modular monolith** — one TypeScript codebase, one Docker image, Nest modules aligned to domain seams. Optional second process entrypoint for the refresh worker (same image, different command / Nest context).
+**Style: NestJS modular monolith** - one TypeScript codebase, one Docker image, Nest modules aligned to domain seams. Optional second process entrypoint for the refresh worker (same image, different command / Nest context).
 
 ```
 Client → [LB*] → NestJS GraphQL API → Store (Postgres)
@@ -64,23 +64,29 @@ Warm path is Postgres-only. Open-Meteo is used for scheduled refresh and bounded
 
 `scoring` is pure/deterministic (compute-on-read; no score table).
 
+#### Database (ERD)
+
+![PostgreSQL ERD](diagrams/04-erd.svg)
+
+Four tables: `Location`, `ForecastDay` (7-day window, upsert on `(location_id, forecast_date)`), `GeocodeCache`, and singleton `RefreshMeta`. Full field list and Prisma SoT: [`contracts/prisma-schema.md`](contracts/prisma-schema.md).
+
 #### Happy-path query (warm)
 
 ![Happy-path query](diagrams/seq-happy-path.svg)
 
-Warm read path — Postgres only.
+Warm read path - Postgres only.
 
 #### Cold-start
 
 ![Cold-start](diagrams/seq-cold-start.svg)
 
-FR-U4 — bounded Open-Meteo fetch for a new location.
+FR-U4 - bounded Open-Meteo fetch for a new location.
 
 #### Scheduled refresh
 
 ![Scheduled refresh](diagrams/seq-refresh.svg)
 
-FR-O1 / FR-S3 — background worker upserts.
+FR-O1 / FR-S3 - background worker upserts.
 
 #### Provider down
 
@@ -92,7 +98,7 @@ Last-known-good with `stale: true`. Our API availability must not depend on Open
 
 ![Ambiguous geocode](diagrams/seq-ambiguous-geocode.svg)
 
-FR-U3 — best match plus alternatives. Client may re-query with lat/lon or a more specific name.
+FR-U3 - best match plus alternatives. Client may re-query with lat/lon or a more specific name.
 
 ### 2.2 Module responsibilities (Nest modules)
 
@@ -105,7 +111,7 @@ FR-U3 — best match plus alternatives. Client may re-query with lat/lon or a mo
 | `OpenMeteoModule` | HTTP client, retry/backoff, circuit breaker | Open-Meteo |
 | `GeocodingModule` | Name → candidates; cache via store | Store, OpenMeteo |
 | `HealthModule` | `GET /health` | Store / RefreshMeta |
-| `ConfigModule` | Env (`REFRESH_INTERVAL_MS`, timeouts, etc.) | — |
+| `ConfigModule` | Env (`REFRESH_INTERVAL_MS`, timeouts, etc.) | - |
 
 ---
 
@@ -125,7 +131,7 @@ Reads and writes are causally independent (`01` §6): user QPS does not drive Op
 
 Traffic is **unknown**. We design for scale without building unused infra.
 
-Assumption to state: design envelope includes **~10M requests/day** (order-of-magnitude). That is still horizontal Nest API replicas + Postgres — not a reason to start with microservices or serverless.
+Assumption to state: design envelope includes **~10M requests/day** (order-of-magnitude). That is still horizontal Nest API replicas + Postgres - not a reason to start with microservices or serverless.
 
 ### 4.1 Scale ladder
 
@@ -144,7 +150,7 @@ Assumption to state: design envelope includes **~10M requests/day** (order-of-ma
 - **In v1:** omitted; one API process is enough for the exercise
 - **App constraint:** no sticky sessions, no local disk as source of truth, cache is best-effort TTL only
 
-Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
+Any L4/L7 LB works (cloud LB, nginx, Traefik) - we do not lock a vendor.
 
 ### 4.3 CDN
 
@@ -166,50 +172,50 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 
 ## 5. Technology ADRs
 
-### ADR-001 — NestJS modular monolith (not microservices)
+### ADR-001 - NestJS modular monolith (not microservices)
 
 - **Decision:** One NestJS deployable with domain modules; optional `api` / `worker` process split via entrypoint (`main.ts` vs `worker.ts`).
 - **Why:** Clear module seams and a single deployable keep the system reviewable; unknown→~10M req/day still doesn’t justify a service mesh. Module boundaries preserve a future extract of the worker.
-- **Rejected:** Microservices per activity or separate geocode/forecast services—premature.
+- **Rejected:** Microservices per activity or separate geocode/forecast services - premature.
 - **Scale trigger:** Split worker deploy when refresh cadence or resource profile diverges from API.
 
-### ADR-002 — Containers, not serverless
+### ADR-002 - Containers, not serverless
 
 - **Decision:** Multi-stage Docker image + Compose for local; container-ready for Fly/Render/ECS-style hosts.
 - **Why:** Long-running GraphQL process + scheduled refresh with concurrency control fit containers. Serverless max duration, cold starts, and cron/worker patterns fight this workload.
 - **Rejected:** AWS Lambda / Cloud Functions as primary runtime.
 - **Cut:** No Terraform/CloudFormation in v1 unless spare time after a working service.
 
-### ADR-003 — PostgreSQL + Prisma
+### ADR-003 - PostgreSQL + Prisma
 
 - **Decision:** PostgreSQL as system of record; Prisma for schema migrations and typed access.
-- **Why:** Idempotent upserts on `(location_id, forecast_date)`; multi-replica API needs a real server DB (SQLite single-writer fights horizontal scale); schema clarity for reviewers; volume from `01` is tiny—Postgres is chosen for **integrity and scale headroom**, not size.
+- **Why:** Idempotent upserts on `(location_id, forecast_date)`; multi-replica API needs a real server DB (SQLite single-writer fights horizontal scale); schema clarity for reviewers; volume from `01` is tiny - Postgres is chosen for **integrity and scale headroom**, not size.
 - **Rejected:** SQLite as primary; DynamoDB/NoSQL (weaker fit for relational forecast rows + upserts in this exercise).
-- **Scale trigger:** PgBouncer / read replicas when DB—not the app—is the bottleneck.
+- **Scale trigger:** PgBouncer / read replicas when DB - not the app - is the bottleneck.
 
-### ADR-004 — NestJS + GraphQL (Apollo driver) on TypeScript/Node
+### ADR-004 - NestJS + GraphQL (Apollo driver) on TypeScript/Node
 
 - **Decision:** **NestJS** modular monolith with GraphQL via the **Apollo driver** (`@nestjs/graphql` + `@nestjs/apollo`). Schema-first: load SDL from `docs/contracts/schema.graphql`. TypeScript (brief mandate).
 - **Why:** NestJS gives modular structure, DI, and providers suited to a production-shaped TypeScript service. Nest does **not** replace the scale design; it hosts the same stateless API + worker seams. GraphQL remains the brief-mandated API style; Apollo is the GraphQL engine under Nest.
 - **Rejected:** Standalone Apollo Server without Nest (weaker module/DI structure for this size); REST wrapper “plus GraphQL later”; gRPC (out of brief).
-- **Scale note:** Target planning envelope ~**10M requests/day** (~100–250 avg QPS, ~1k peak with burst) still means **horizontal Nest API replicas + Postgres**, not microservices. Nest modules ≠ distributed services.
-- **Worker:** Separate Nest application context / entrypoint (`worker.ts`) with schedule or interval provider — same Docker image, different command — so refresh stays decoupled from request threads.
+- **Scale note:** Target planning envelope ~**10M requests/day** (~100-250 avg QPS, ~1k peak with burst) still means **horizontal Nest API replicas + Postgres**, not microservices. Nest modules ≠ distributed services.
+- **Worker:** Separate Nest application context / entrypoint (`worker.ts`) with schedule or interval provider - same Docker image, different command - so refresh stays decoupled from request threads.
 
-### ADR-005a — In-process forecast cache
+### ADR-005a - In-process forecast cache
 
 - **Decision:** Short-TTL in-memory cache for hot locations on each API instance (`FORECAST_CACHE_TTL_MS`, default 60s). **Status: implemented.**
 - **Why:** Hot set ~500 KB (`01`); 6h data change rate; single/few replicas make a shared forecast cache optional.
 - **Rejected:** Shared Redis/Memcached for forecast payloads in v1 (ops cost without proven stampede).
 - **Scale trigger:** Shared forecast cache when replica count causes stampede or uneven hit rates.
 
-### ADR-005b — Redis for shared rate-limit storage
+### ADR-005b - Redis for shared rate-limit storage
 
 - **Decision:** Nest throttler uses Redis when `REDIS_URL` is set; **required when `NODE_ENV=production`**. Compose ships a `redis` service for local demo. **Status: implemented.**
 - **Why:** Stateless API replicas need a shared limit store so clients cannot bypass throttling by hitting different instances; fail-closed on Redis errors.
 - **Rejected:** In-process-only throttling for production (broken under horizontal scale).
 - **Note:** This Redis role is **rate limiting only**, not the forecast cache (ADR-005a).
 
-### ADR-006 — Refresh scheduling in-worker
+### ADR-006 - Refresh scheduling in-worker
 
 - **Decision:** Interval inside the worker process; `REFRESH_INTERVAL_MS` env config in milliseconds (FR-O2). Default `21600000` (6 hours). Cross-process leadership via `pg_try_advisory_lock`. **Status: implemented.**
 - **Why:** Simplest decoupled refresh; lock prevents double-fetch when scaled.
@@ -252,6 +258,6 @@ Any L4/L7 LB works (cloud LB, nginx, Traefik)—we do not lock a vendor.
 
 ## 8. Next
 
-→ [`03-api-and-domain-design.md`](03-api-and-domain-design.md) — consumer GraphQL contract, data model, scoring rubric.
+→ [`03-api-and-domain-design.md`](03-api-and-domain-design.md) - consumer GraphQL contract, data model, scoring rubric.
 
 Doc index: [`README.md`](README.md).

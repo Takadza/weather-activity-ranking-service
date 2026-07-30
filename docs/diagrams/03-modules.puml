@@ -3,7 +3,7 @@
 !theme plain
 skinparam linetype ortho
 top to bottom direction
-title Modular monolith — internal modules
+title Modular monolith - internal modules
 
 rectangle "Activity Ranking Service" {
   component "graphql" as GQL

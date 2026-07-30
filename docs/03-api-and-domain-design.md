@@ -1,10 +1,10 @@
-# 03 — API Contract & Domain Design
+# 03 - API Contract & Domain Design
 
-**Stage 2 of 5 (Design) — consumer contract, data model, scoring rubric**
+**Stage 2 of 5 (Design) - consumer contract, data model, scoring rubric**
 
-Freeze interfaces before implementation. Clients consume the GraphQL contract in §1–3; implementers use the data model (§4) and rubric (§5).
+Freeze interfaces before implementation. Clients consume the GraphQL contract in §1-3; implementers use the data model (§4) and rubric (§5).
 
-**Machine-oriented source of truth:** [`contracts/`](contracts/) — [`schema.graphql`](contracts/schema.graphql), [`examples.graphql`](contracts/examples.graphql), [`prisma-schema.md`](contracts/prisma-schema.md), [`contracts/README.md`](contracts/README.md). Prefer those files over copying SDL from this doc.
+**Machine-oriented source of truth:** [`contracts/`](contracts/) - [`schema.graphql`](contracts/schema.graphql), [`examples.graphql`](contracts/examples.graphql), [`prisma-schema.md`](contracts/prisma-schema.md), [`contracts/README.md`](contracts/README.md). Prefer those files over copying SDL from this doc.
 
 Depends on: [`01-requirements-and-estimation.md`](01-requirements-and-estimation.md), [`02-system-design.md`](02-system-design.md).
 
@@ -23,7 +23,7 @@ See [`contracts/README.md`](contracts/README.md) for the canonical consumer guid
 - **Content-Type:** `application/json` with GraphQL body `{ "query": "...", "variables": { ... } }`
 - **Auth (v1):** shared `API_KEY` via `X-API-Key` or `Authorization: Bearer`. Required when `NODE_ENV=production`. `/health/live` stays public; `/metrics` uses `METRICS_TOKEN` separately.
 - **Playground:** disabled; use Postman or curl for demos
-- **Postman:** [`../postman/weather-activity-ranking.postman_collection.json`](../postman/weather-activity-ranking.postman_collection.json) — cities, coords, auth/negative cases, health, metrics (Compose defaults: `local-compose-api-key` / `local-compose-metrics-token`)
+- **Postman:** [`../postman/weather-activity-ranking.postman_collection.json`](../postman/weather-activity-ranking.postman_collection.json) - cities, coords, auth/negative cases, health, metrics (Compose defaults: `local-compose-api-key` / `local-compose-metrics-token`)
 
 Consumers **must** handle freshness fields on every successful ranking payload: `lastUpdated`, `dataAgeSeconds`, `stale`.
 
@@ -46,17 +46,19 @@ Consumers **must** handle freshness fields on every successful ranking payload: 
 | Missing / wrong API key | HTTP 401 or GraphQL `UNAUTHENTICATED` |
 | Valid warm location | `200` + payload; `stale: false` if within threshold |
 | Ambiguous name | `200` + `location` = best match + `alternatives` populated |
-| Empty / invalid input | GraphQL error (`BAD_USER_INPUT`) — e.g. missing both name and coordinates; name too long |
+| Empty / invalid input | GraphQL error (`BAD_USER_INPUT`) - e.g. missing both name and coordinates; name too long |
 | Cold-start success | `200` + payload; may be slower (< 3s) |
 | Cold-start failure (no data, provider down) | GraphQL error (`PROVIDER_UNAVAILABLE` or similar) |
 | Warm location, provider down | `200` + last-known-good; `stale: true` |
-| Activity N/A (e.g. surfing inland) | `available: false`, `score: null`, reason code e.g. `NO_MARINE_DATA` — do not fail the query |
+| Activity N/A (e.g. surfing inland) | `available: false`, `score: null`, reason code e.g. `NO_MARINE_DATA` - do not fail the query |
 
 ---
 
 ## 4. Data model
 
 **Canonical Prisma design:** [`contracts/prisma-schema.md`](contracts/prisma-schema.md).
+
+![PostgreSQL ERD](diagrams/04-erd.svg)
 
 **v1 storage policy:** keep **current 7-day window only** per location (`01` §5.4). No historical retention.
 
@@ -74,14 +76,14 @@ Deterministic pure functions: same weather features → same scores. Unit-test w
 
 **Exact algorithm SoT:** [`src/scoring/`](../src/scoring/) with `rubricVersion: "2026-07-28.1"`. This section is product guidance; if narrative and code disagree, **code wins**.
 
-**Output per activity per day:** `score` ∈ [0, 100] or unavailable; `reasonCodes` explain major drivers (for tests and debugging—not user essays).
+**Output per activity per day:** `score` ∈ [0, 100] or unavailable; `reasonCodes` explain major drivers (for tests and debugging - not user essays).
 
 ### 5.1 Shared helpers
 
 - Clamp score to `[0, 100]`
 - Missing required field for an activity → `available: false` (do not invent data)
 
-### 5.2 Skiing (weather suitability — not resort existence)
+### 5.2 Skiing (weather suitability - not resort existence)
 
 | Signal | Guidance |
 |---|---|
@@ -89,7 +91,7 @@ Deterministic pure functions: same weather features → same scores. Unit-test w
 | Penalise | Rain (`precip_mm` high with `temp_max_c` > 2); strong wind |
 | Soft boost | Colder temps with snow |
 
-Example shape (see Task 2 for exact numbers used in tests):
+Example shape (golden values in `src/scoring/rubric.spec.ts`):
 
 - Warm-range boost when `temp_max_c` ∈ [−15, 5]
 - Boost from snowfall; penalise warm rain and high wind
@@ -102,14 +104,14 @@ Example shape (see Task 2 for exact numbers used in tests):
 | Signal | Guidance |
 |---|---|
 | Require | `wave_height_m` present; else `available: false`, `NO_MARINE_DATA` |
-| Prefer | Wave height ~0.5–2.5 m; moderate wind; not extreme precip |
+| Prefer | Wave height ~0.5-2.5 m; moderate wind; not extreme precip |
 | Penalise | Flat water; huge waves; storm wind |
 
 ### 5.4 Outdoor sightseeing
 
 | Signal | Guidance |
 |---|---|
-| Prefer | Mild temp (~10–28°C), low precip, low precip probability, calm wind, clear-ish `weather_code` |
+| Prefer | Mild temp (~10-28°C), low precip, low precip probability, calm wind, clear-ish `weather_code` |
 | Penalise | Heavy rain, extreme heat/cold, high wind |
 
 Indoor is the complement, not a copy.
@@ -121,7 +123,7 @@ Indoor is the complement, not a copy.
 | Prefer | Poor outdoor conditions (rain, extreme temp, high wind) → higher indoor score |
 | Penalise | Ideal outdoor weather (indoor is “less necessary”) |
 
-Indoor remains available even in good weather (museums on sunny days)—score reflects relative suitability, still in 0–100.
+Indoor remains available even in good weather (museums on sunny days) - score reflects relative suitability, still in 0-100.
 
 ### 5.6 Overall ranking
 
@@ -145,6 +147,6 @@ Geocoding: Open-Meteo geocoding API; persist normalised query → candidates (FR
 
 ## 7. Next
 
-→ [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md) — refresh ops, failure modes, observability, deliberate cuts.
+→ [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md) - refresh ops, failure modes, observability, deliberate cuts.
 
 Doc index: [`README.md`](README.md).

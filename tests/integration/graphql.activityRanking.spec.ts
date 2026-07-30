@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { performance } from 'node:perf_hooks';
 import { Server } from 'node:http';
 import request from 'supertest';
 import { AppModule } from '../../src/app.module';
@@ -19,10 +20,31 @@ const COLD_LAT = 42.222222;
 const COLD_LON = -72.222222;
 const FAIL_LAT = 43.333333;
 const FAIL_LON = -73.333333;
+const PARIS_FR_LAT = 48.8566;
+const PARIS_FR_LON = 2.3522;
+const PARIS_TX_LAT = 33.6609;
+const PARIS_TX_LON = -95.5555;
 const WARM_LAT_R = roundCoordinate(WARM_LAT);
 const COLD_LAT_R = roundCoordinate(COLD_LAT);
 const FAIL_LAT_R = roundCoordinate(FAIL_LAT);
-const TEST_LATS = [WARM_LAT_R, COLD_LAT_R, FAIL_LAT_R];
+const PARIS_FR_LAT_R = roundCoordinate(PARIS_FR_LAT);
+const PARIS_TX_LAT_R = roundCoordinate(PARIS_TX_LAT);
+const TEST_LATS = [
+  WARM_LAT_R,
+  COLD_LAT_R,
+  FAIL_LAT_R,
+  PARIS_FR_LAT_R,
+  PARIS_TX_LAT_R,
+];
+
+/** Design target from docs/01 §4; CI uses a generous buffer to avoid flake. */
+const P95_LIMIT_MS = 500;
+
+function p95(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.ceil(0.95 * sorted.length) - 1;
+  return sorted[Math.max(0, index)];
+}
 
 type GraphqlBody<T> = {
   errors?: unknown;
@@ -169,6 +191,7 @@ describe('GraphQL activityRanking', () => {
         latitude: { in: TEST_LATS },
       },
     });
+    await prisma.$disconnect();
     await app.close();
   });
 
@@ -202,6 +225,46 @@ describe('GraphQL activityRanking', () => {
     expect(payload!.location.latitude).toBe(roundCoordinate(WARM_LAT));
     expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
     expect(openMeteo.geocode).not.toHaveBeenCalled();
+  });
+
+  it('warm path p95 stays under CI threshold (design target 300ms)', async () => {
+    const location = await locations.findOrCreateLocation({
+      name: 'Warm Path Perf City',
+      latitude: WARM_LAT,
+      longitude: WARM_LON,
+    });
+    await forecasts.upsertForecastDays(location.id, sevenDays());
+
+    const variables = {
+      location: { latitude: WARM_LAT, longitude: WARM_LON },
+    };
+
+    // Warmup (not timed) — avoids first-request JIT/connection setup skewing p95.
+    await request(app.getHttpServer())
+      .post('/graphql')
+      .send({ query: RANKING_QUERY, variables })
+      .expect(200);
+
+    const samples: number[] = [];
+    const iterations = 15;
+    for (let i = 0; i < iterations; i++) {
+      const start = performance.now();
+      const res = await request(app.getHttpServer())
+        .post('/graphql')
+        .send({ query: RANKING_QUERY, variables });
+      samples.push(performance.now() - start);
+
+      if (res.status !== 200) {
+        throw new Error(
+          `warm path request ${i + 1} failed: HTTP ${res.status} ${JSON.stringify(res.body)}`,
+        );
+      }
+      const body = res.body as GraphqlBody<ActivityRankingData>;
+      expect(body.errors).toBeUndefined();
+    }
+
+    expect(p95(samples)).toBeLessThan(P95_LIMIT_MS);
+    expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
   });
 
   it('cold-start: fetches Open-Meteo when forecasts are empty', async () => {
@@ -286,5 +349,49 @@ describe('GraphQL activityRanking', () => {
     expectGraphqlErrorCode(body, 'BAD_USER_INPUT');
     expect(openMeteo.fetchForecast).not.toHaveBeenCalled();
     expect(openMeteo.geocode).not.toHaveBeenCalled();
+  });
+
+  it('ambiguous geocode: returns alternatives for ambiguous place name', async () => {
+    await prisma.geocodeCache.deleteMany({
+      where: { queryNormalized: 'paris' },
+    });
+    openMeteo.geocode.mockResolvedValue([
+      {
+        name: 'Paris',
+        country: 'France',
+        admin1: 'Île-de-France',
+        latitude: PARIS_FR_LAT,
+        longitude: PARIS_FR_LON,
+      },
+      {
+        name: 'Paris',
+        country: 'United States',
+        admin1: 'Texas',
+        latitude: PARIS_TX_LAT,
+        longitude: PARIS_TX_LON,
+      },
+    ]);
+    openMeteo.fetchForecast.mockResolvedValue(sevenDays());
+
+    const res = await request(app.getHttpServer())
+      .post('/graphql')
+      .send({
+        query: RANKING_QUERY,
+        variables: { location: { name: 'Paris' } },
+      })
+      .expect(200);
+
+    const body = res.body as GraphqlBody<ActivityRankingData>;
+    expect(body.errors).toBeUndefined();
+    const payload = body.data?.activityRanking;
+    expect(payload).toBeDefined();
+    expect(payload!.alternatives.length).toBeGreaterThanOrEqual(1);
+    const ids = new Set([
+      payload!.location.id,
+      ...payload!.alternatives.map((a) => a.id),
+    ]);
+    expect(ids.size).toBe(1 + payload!.alternatives.length);
+    expect(openMeteo.geocode).toHaveBeenCalledTimes(1);
+    expect(openMeteo.fetchForecast).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="780" height="540" viewBox="0 0 780 540" role="img" aria-labelledby="title desc">
-  <title id="title">Modular monolith — internal modules</title>
+  <title id="title">Modular monolith - internal modules</title>
   <desc id="desc">Layered Nest modules from GraphQL transport down to store and Open-Meteo client.</desc>
   <rect width="780" height="540" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-  <text x="390" y="34" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Modular monolith — internal modules</text>
+  <text x="390" y="34" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Modular monolith - internal modules</text>
 
   <defs>
     <marker id="arrM" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">

@@ -4,7 +4,7 @@
   "description": "Rank next 7 days for skiing, surfing, outdoor sightseeing, and indoor sightseeing from persisted Open-Meteo data",
   "author": "",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=22"
   },
@@ -24,6 +24,7 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand --testPathIgnorePatterns=/tests/integration/",
     "test:integration": "jest --config ./test/jest-integration.json --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:all": "npm test && npm run test:integration && npm run test:e2e",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -106,9 +107,24 @@
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [
-      "src/**/*.(t|j)s"
+      "src/**/*.(t|j)s",
+      "!src/**/*.spec.ts"
     ],
     "coverageDirectory": "coverage",
+    "coverageThreshold": {
+      "global": {
+        "statements": 59,
+        "branches": 53,
+        "functions": 47,
+        "lines": 59
+      },
+      "./src/scoring/": {
+        "statements": 85
+      },
+      "./src/open-meteo/": {
+        "statements": 80
+      }
+    },
     "testEnvironment": "node",
     "passWithNoTests": true
   }

@@ -1,6 +1,6 @@
 @startuml seq-refresh
 !theme plain
-title Sequence — Scheduled background refresh (FR-O1)
+title Sequence - Scheduled background refresh (FR-O1)
 
 participant "Refresh\nworker" as Worker
 participant "Store" as Store

@@ -1,6 +1,6 @@
 @startuml seq-provider-down
 !theme plain
-title Sequence — Provider down / degraded read (last-known-good)
+title Sequence - Provider down / degraded read (last-known-good)
 
 actor Client
 participant "GraphQL\nAPI" as GQL

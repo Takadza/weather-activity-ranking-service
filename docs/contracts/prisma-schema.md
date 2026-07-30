@@ -1,14 +1,18 @@
 # Prisma database design (v1)
 
-Implemented in [`prisma/schema.prisma`](../../prisma/schema.prisma). `DATABASE_URL` is configured via [`prisma.config.ts`](../../prisma.config.ts) (Prisma 7 — not in the datasource block).
+Implemented in [`prisma/schema.prisma`](../../prisma/schema.prisma). `DATABASE_URL` is configured via [`prisma.config.ts`](../../prisma.config.ts) (Prisma 7 - not in the datasource block).
 
 **Policies**
 
 - Current 7-day forecast window only (no history table)
-- Scores are **compute-on-read** via pure scorer — no `ActivityScoreDay` table in v1
+- Scores are **compute-on-read** via pure scorer - no `ActivityScoreDay` table in v1
 - Idempotent upsert key: `ForecastDay @@unique([locationId, forecastDate])` (FR-S3)
 
 ## ER overview
+
+![PostgreSQL ERD](../diagrams/04-erd.svg)
+
+Also linked from [system design §2.1](../02-system-design.md#21-diagrams).
 
 ```mermaid
 erDiagram
@@ -117,7 +121,7 @@ model RefreshMeta {
 
 ## Indexes / notes
 
-- `@@unique([latitude, longitude])` — treat exact floats from geocoder as identity for v1
-- `tracked` + `@@index([tracked])` — refresh worker iterates **tracked** locations only
+- `@@unique([latitude, longitude])` - treat exact floats from geocoder as identity for v1
+- `tracked` + `@@index([tracked])` - refresh worker iterates **tracked** locations only
 - A location becomes tracked when first successfully resolved via a client query (name-based); coordinate-only lookups do not auto-track
 - Cold-start creates/updates the `Location` row before upserting `ForecastDay`

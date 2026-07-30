@@ -1,4 +1,4 @@
-# Example GraphQL operations — Weather Activity Ranking Service
+# Example GraphQL operations - Weather Activity Ranking Service
 # POST /graphql with JSON body: { "query": "...", "variables": { ... } }
 #
 # Auth (required in production / Compose):
@@ -46,7 +46,7 @@ query RankByName($location: LocationInput!) {
 # Variables (by name):
 # { "location": { "name": "Cape Town" } }
 #
-# Variables (by coordinates — coordinates win if both set):
+# Variables (by coordinates - coordinates win if both set):
 # { "location": { "latitude": -33.9249, "longitude": 18.4241 } }
 
 query HealthCheck {

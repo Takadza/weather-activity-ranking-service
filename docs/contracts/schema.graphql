@@ -1,4 +1,4 @@
-"""Weather Activity Ranking Service — GraphQL consumer contract.
+"""Weather Activity Ranking Service - GraphQL consumer contract.
 Source of truth for the consumer GraphQL API. See docs/contracts/README.md.
 """
 
@@ -46,7 +46,7 @@ type Location {
 type DailyActivityScore {
   """Forecast local date as YYYY-MM-DD."""
   date: String!
-  """0–100; null if N/A for this activity/day."""
+  """0-100; null if N/A for this activity/day."""
   score: Float
   available: Boolean!
   reasonCodes: [ReasonCode!]!

@@ -3,7 +3,7 @@
 !theme plain
 skinparam linetype ortho
 left to right direction
-title Deployment — v1 ship vs horizontal scale posture
+title Deployment - v1 ship vs horizontal scale posture
 
 actor Client
 rectangle "Edge (optional)" {
