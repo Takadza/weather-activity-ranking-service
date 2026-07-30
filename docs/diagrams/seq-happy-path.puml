@@ -1,6 +1,6 @@
 @startuml seq-happy-path
 !theme plain
-title Sequence — Happy-path activity ranking (warm location)
+title Sequence - Happy-path activity ranking (warm location)
 
 actor Client
 participant "GraphQL\nAPI" as GQL

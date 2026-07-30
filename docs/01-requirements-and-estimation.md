@@ -1,8 +1,8 @@
-# Weather Activity Ranking Service — Requirements & Estimation
+# Weather Activity Ranking Service - Requirements & Estimation
 
 **Stage 1 of 5: Clarify → Design → Implementation notes → Code → Review**
 
-Constraints, clarifying assumptions, functional & non-functional requirements, and back-of-the-envelope calculations. Architecture, API contracts, ops, and CI/CD are covered in `02`–`05` (Design stage).
+Constraints, clarifying assumptions, functional & non-functional requirements, and back-of-the-envelope calculations. Architecture, API contracts, ops, and CI/CD are covered in `02`-`05` (Design stage).
 
 ---
 
@@ -15,14 +15,14 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 - **Weather source:** Open-Meteo (free public API; rate limits; no SLA)
 - **Persistence is mandatory:** serve weather from storage, not from Open-Meteo on every request
 - **Backend only:** no front end
-- **AI-assisted development is expected** — document decisions inline as they are made
-- **Storage technology unconstrained** — chosen in System Design (`02`) once workload shape is known
+- **AI-assisted development is expected** - document decisions inline as they are made
+- **Storage technology unconstrained** - chosen in System Design (`02`) once workload shape is known
 - **Submission:** public GitHub repo; show reasoning (docs/commits), not a polished write-up alone
 
 **Inferred**
 
 - Deliverable is a public repo + README for engineer review (run instructions and deliberate cuts matter)
-- “Production judgement” without over-building: graceful degradation, idempotency, observability — sized to this workload
+- “Production judgement” without over-building: graceful degradation, idempotency, observability - sized to this workload
 - Time-boxed: interesting trade-offs beat exhaustive feature coverage
 - Design for horizontal scale of a stateless API; ship a focused single-instance stack that stays compatible with replicas behind a load balancer
 
@@ -53,7 +53,7 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 ### 3.2 System
 
 - **FR-S1:** Persist raw Open-Meteo forecasts; hot path reads storage only (cold-start FR-U4 is the bounded exception)
-- **FR-S2:** Persist derived activity scores (or compute cheaply from stored raw data) — no re-fetch to score
+- **FR-S2:** Persist derived activity scores (or compute cheaply from stored raw data) - no re-fetch to score
 - **FR-S3:** Refresh writes are idempotent upserts keyed by `(location, forecast_date)`
 - **FR-S4:** Scoring per activity is deterministic and explicit (Q1)
 - **FR-S5:** Persist/cache geocoding (name → coordinates)
@@ -73,13 +73,13 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 | Area | Target |
 |---|---|
 | **Availability** | **99.9%** API; on Open-Meteo failure serve last-known-good data with staleness flag (do not couple our uptime to theirs) |
-| **Consistency** | **Eventual** — source is a changing forecast; no transactional user actions; lag OK if observable (FR-U2) |
+| **Consistency** | **Eventual** - source is a changing forecast; no transactional user actions; lag OK if observable (FR-U2) |
 | **Performance** | Persisted read path **< 300ms p95**; cold-start **< 3s** with timeout; refresh job has no user-facing latency SLO |
 | **Reliability** | Idempotent upserts (FR-S3); retry/backoff (FR-O3); degraded mode = stale-but-flagged |
 | **Scalability** | Stateless read path → horizontal app scaling is a config change; refresh scales with location count, not user QPS |
 | **Extensibility** | New activity = new scoring function on existing persisted fields (no refresh/schema redesign) |
 | **Maintainability** | Scoring, refresh, and GraphQL resolvers are separable concerns |
-| **Testability** | Scoring is pure/deterministic — unit-testable without DB or HTTP (hard requirement for the scoring module) |
+| **Testability** | Scoring is pure/deterministic - unit-testable without DB or HTTP (hard requirement for the scoring module) |
 | **Cost** | Workload fits a small app + DB instance; main “cost” is Open-Meteo rate-limit citizenship |
 | **Observability** | Structured logs; metrics for refresh success/fail, Open-Meteo latency/errors, cache/DB hit ratio |
 | **Security** | No PII collected; validate location input (length, parameterised queries); shared `API_KEY` on GraphQL/HTTP (except `/health/live`); `METRICS_TOKEN` for scrape/detail; Redis rate limits in production |
@@ -123,8 +123,8 @@ Constraints, clarifying assumptions, functional & non-functional requirements, a
 
 - ~**1 KB** per location per day-record (7-day forecast fields + derived scores)
 - Steady-state current forecast: 5,000 × 7 ≈ **~35 MB**
-- **v1 decision:** keep **current forecast only** (matches FR-U1). Full history would be ~140 MB/day / ~51 GB/year — deliberately cut; no FR requires it.
-- Single DB instance is enough; **tech choice locked in `02`** (Postgres — volume alone doesn’t force it; multi-replica API and upserts do).
+- **v1 decision:** keep **current forecast only** (matches FR-U1). Full history would be ~140 MB/day / ~51 GB/year - deliberately cut; no FR requires it.
+- Single DB instance is enough; **tech choice locked in `02`** (Postgres - volume alone doesn’t force it; multi-replica API and upserts do).
 
 ### 5.5 Bandwidth
 
@@ -143,7 +143,7 @@ Value is read-latency shaping and lower DB load, not capacity.
 ### 5.7 Servers
 
 - **App:** one stateless instance (scale horizontally later if traffic assumptions are wrong)
-- **DB:** one instance — tens of MB, write rate ≪ 1/sec
+- **DB:** one instance - tens of MB, write rate ≪ 1/sec
 - **Refresh worker:** one scheduled process; queue/worker-pool deferred unless locations or frequency grow ~100×
 
 ---
@@ -162,12 +162,12 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 
 **Implications for System Design (`02`):**
 
-1. Stateless request handling — cheap to keep now, expensive to retrofit
+1. Stateless request handling - cheap to keep now, expensive to retrofit
 2. All Open-Meteo I/O in background refresh (except bounded cold-start FR-U4)
 3. Prefer read-optimised persistence over write-optimised
-4. Asynchronous, idempotent refresh (FR-S3) — retries/overlaps must be safe by construction
-5. Separate ingestion, scoring, and GraphQL read API — they are independent workloads
-6. External provider dominates latency/reliability risk — invest at that boundary, not in internal perf tuning
+4. Asynchronous, idempotent refresh (FR-S3) - retries/overlaps must be safe by construction
+5. Separate ingestion, scoring, and GraphQL read API - they are independent workloads
+6. External provider dominates latency/reliability risk - invest at that boundary, not in internal perf tuning
 
 ---
 
@@ -196,17 +196,17 @@ Reads and writes are **causally independent**: writes follow tracked-location co
 
 ## 8. What We Learned → Next
 
-- Peak ~5 QPS is not the hard problem — **decoupled schedule-driven writes** and the **Open-Meteo boundary** are
+- Peak ~5 QPS is not the hard problem - **decoupled schedule-driven writes** and the **Open-Meteo boundary** are
 - Storage stays small; no sharding or specialised TSDB for v1
 - Caching + background refresh are where reliability and latency wins live
 - DB tech can be chosen for schema fit and ops simplicity, not raw scale
 
 **Next (Design stage):**
 
-1. [`02-system-design.md`](02-system-design.md) — HLD, PlantUML diagrams, scale ladder, technology ADRs
-2. [`03-api-and-domain-design.md`](03-api-and-domain-design.md) — GraphQL consumer contract, data model, scoring rubric
-3. [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md) — refresh, failure modes, observability, cuts
-4. [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md) — GitHub Actions CI/CD, Docker Compose
-5. [Implementation notes](06-implementation-notes.md) — Code + Review complete
+1. [`02-system-design.md`](02-system-design.md) - HLD, PlantUML diagrams, scale ladder, technology ADRs
+2. [`03-api-and-domain-design.md`](03-api-and-domain-design.md) - GraphQL consumer contract, data model, scoring rubric
+3. [`04-operations-and-failure-modes.md`](04-operations-and-failure-modes.md) - refresh, failure modes, observability, cuts
+4. [`05-cicd-and-delivery.md`](05-cicd-and-delivery.md) - GitHub Actions CI/CD, Docker Compose
+5. [Implementation notes](06-implementation-notes.md) - Code + Review complete
 
 Doc index: [`README.md`](README.md).

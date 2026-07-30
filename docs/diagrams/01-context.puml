@@ -1,10 +1,10 @@
 @startuml 01-context
 ' Presentation artifact: docs/diagrams/01-context.svg (hand-authored for GitHub).
-' This .puml is a structural sketch only — prefer editing the SVG for layout.
+' This .puml is a structural sketch only - prefer editing the SVG for layout.
 !theme plain
 skinparam linetype ortho
 left to right direction
-title Context — Weather Activity Ranking Service
+title Context - Weather Activity Ranking Service
 
 actor Client
 rectangle "Activity Ranking Service\n(Node.js / TypeScript)" as App

@@ -1,4 +1,4 @@
-# 06 — Implementation notes
+# 06 - Implementation notes
 
 Short map of what shipped. Prefer the root [README](../README.md) for run instructions and [contracts/](contracts/) for the consumer API.
 

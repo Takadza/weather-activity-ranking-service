@@ -27,9 +27,14 @@ The brief requires **GraphQL** (not REST). There is no OpenAPI/Swagger spec.
 
 Narrative design, scoring rubric, and consumer rules: [../03-api-and-domain-design.md](../03-api-and-domain-design.md).
 
-### Postman
+### Postman - get & import
 
-Import the collection above. Defaults match Compose:
+**File in repo:** [`../../postman/weather-activity-ranking.postman_collection.json`](../../postman/weather-activity-ranking.postman_collection.json)
+
+1. Clone/open this repo (or download that JSON from GitHub)
+2. Start Compose so the API is up: `docker compose up --build -d`
+3. In Postman: **Import** → **Upload Files** → choose the JSON (or drag it in)
+4. Check collection **Variables** (defaults match Compose):
 
 | Variable | Default |
 |---|---|
@@ -37,7 +42,7 @@ Import the collection above. Defaults match Compose:
 | `apiKey` | `local-compose-api-key` |
 | `metricsToken` | `local-compose-metrics-token` |
 
-Folders cover auth failures, health/ready, rank-by-name (multiple cities), rank-by-coordinates, validation errors, and metrics (API + worker).
+Folders cover auth failures, health/ready, rank-by-name (multiple cities), rank-by-coordinates, validation errors, and metrics (API + worker). See also the root [README Postman section](../../README.md#postman-collection).
 
 ## Freshness (required for clients)
 

@@ -24,6 +24,7 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run test:cov
       - run: npm run build
   integration:
     runs-on: ubuntu-latest

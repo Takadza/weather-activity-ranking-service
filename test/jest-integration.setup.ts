@@ -7,3 +7,5 @@ process.env.NODE_ENV = 'test';
 process.env.API_KEY ??= '';
 process.env.METRICS_TOKEN ??= '';
 process.env.REDIS_URL ??= '';
+process.env.THROTTLE_TTL_MS = '60000';
+process.env.THROTTLE_LIMIT = '10000';

@@ -1,6 +1,6 @@
-# 05 — CI/CD & Delivery
+# 05 - CI/CD & Delivery
 
-**Stage 2 of 5 (Design) — how we build, test, and run the service**
+**Stage 2 of 5 (Design) - how we build, test, and run the service**
 
 Pipeline and Docker files are implemented; see [`.github/workflows/ci.yml`](../.github/workflows/ci.yml), [`Dockerfile`](../Dockerfile), and [`docker-compose.yml`](../docker-compose.yml).
 
@@ -37,19 +37,20 @@ Nest modules align with `02` (`Graphql`, `Scoring`, `Store`, `Refresh`, `OpenMet
 
 ## 3. GitHub Actions CI (implemented)
 
-Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — triggers on push to `main`/`develop` and pull requests.
+Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) - triggers on push to `main`/`develop` and pull requests.
 
 **Job `unit`:**
 
 | Step | Command / action |
 |---|---|
 | Checkout | `actions/checkout@v5` |
-| Node | `actions/setup-node@v5` — Node 22, `cache: npm` |
+| Node | `actions/setup-node@v5` - Node 22, `cache: npm` |
 | Install | `npm ci` |
 | Audit | `npm audit --omit=dev --audit-level=high` (`ws` pinned via `overrides`) |
 | Lint | `npm run lint` |
 | Typecheck | `npm run typecheck` |
 | Unit tests | `npm test` (no Postgres) |
+| Coverage | `npm run test:cov` (enforces thresholds on `src/scoring/` and `src/open-meteo/`) |
 | Build | `npm run build` |
 
 **Job `integration` (needs `unit`):**
@@ -59,6 +60,8 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — triggers
 - Schema drift check via `prisma migrate diff --exit-code`
 - `npm run test:integration`
 - `npm run test:e2e`
+
+**Provider mocking:** integration and e2e suites mock `OpenMeteoClient` for deterministic CI ([`test/app.e2e-spec.ts`](../test/app.e2e-spec.ts), [`tests/integration/`](../tests/integration/)). Live Open-Meteo behaviour is checked manually via Docker Compose + the Postman collection.
 
 **Job `docker` (needs `unit`):**
 
@@ -70,9 +73,9 @@ Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) — triggers
 
 ### 4.1 Multi-stage Dockerfile
 
-1. **deps** — `npm ci`
-2. **build** — `prisma generate`, Nest build
-3. **runtime** — production `node`, non-root user, `node dist/main` (API)
+1. **deps** - `npm ci`
+2. **build** - `prisma generate`, Nest build
+3. **runtime** - production `node`, non-root user, `node dist/main` (API)
 
 Worker: same image, command override e.g. `node dist/worker`.
 
@@ -87,6 +90,14 @@ Worker: same image, command override e.g. `node dist/worker`.
 
 **Not a production template.** Compose ships demo `API_KEY` / `METRICS_TOKEN` and weak DB password for local use only. Prefer a secret store and digest-pinned base images (`node@sha256:…`, `postgres@sha256:…`) in real deploys. Prefer running `prisma migrate deploy` as a one-shot Job rather than on every process start (ops follow-up).
 
+**One-shot migrate (production pattern):**
+
+```bash
+docker compose run --rm api npx prisma migrate deploy
+```
+
+Compose currently runs migrate on `api` and `worker` start for local convenience; production should use a dedicated migrate step before rolling out new app tasks.
+
 Env from Compose `environment`. Publish `api` on `3000`.
 
 **v1 scale story:** Compose runs one `api`. Production scale = more API tasks behind a platform LB with shared `REDIS_URL` (see `02`).
@@ -97,7 +108,7 @@ Env from Compose `environment`. Publish `api` on `3000`.
 
 | Level | What | Take-home? |
 |---|---|---|
-| CI only | Gates on PR | **Yes — do this** |
+| CI only | Gates on PR | **Yes - do this** |
 | Build image on `main` | Push to GHCR | Nice if time |
 | Deploy | Fly/Render/ECS | Optional; README “how you would” is enough |
 
@@ -130,7 +141,7 @@ Commit `.env.example` only (`.gitignore` ignores `.env.*` except `.env.example`)
 
 - How to run: `docker compose up` (or npm + local Postgres)
 - One copy-paste GraphQL query
-- Assumptions + link to `docs/01`–`06`
+- Assumptions + link to `docs/01`-`06`
 - Deliberate cuts (from `04`)
 - Note: TypeScript, GraphQL, persisted Open-Meteo data
 
@@ -148,6 +159,6 @@ Design packet:
 
 **Implementation notes (done):** [`06-implementation-notes.md`](06-implementation-notes.md)
 
-**Next:** none — Code and Review complete.
+**Next:** none - Code and Review complete.
 
 Doc index: [`README.md`](README.md) · Root: [`../README.md`](../README.md).

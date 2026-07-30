@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="920" height="320" viewBox="0 0 920 320" role="img" aria-labelledby="title desc">
-  <title id="title">Context — Weather Activity Ranking Service</title>
+  <title id="title">Context - Weather Activity Ranking Service</title>
   <desc id="desc">Client talks to the NestJS service; warm path uses PostgreSQL; Open-Meteo is for refresh and cold-start only.</desc>
   <rect width="920" height="320" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-  <text x="460" y="36" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Context — Weather Activity Ranking Service</text>
+  <text x="460" y="36" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Context - Weather Activity Ranking Service</text>
 
   <!-- Client -->
   <g transform="translate(70,130)">

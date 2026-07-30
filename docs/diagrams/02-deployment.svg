@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1000" height="380" viewBox="0 0 1000 380" role="img" aria-labelledby="title desc">
-  <title id="title">Deployment — v1 ship vs horizontal scale posture</title>
+  <title id="title">Deployment - v1 ship vs horizontal scale posture</title>
   <desc id="desc">Left to right: Client, optional load balancer, API and worker, then PostgreSQL, Redis, and Open-Meteo.</desc>
   <rect width="1000" height="380" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-  <text x="500" y="32" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Deployment — v1 ship vs horizontal scale posture</text>
+  <text x="500" y="32" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">Deployment - v1 ship vs horizontal scale posture</text>
 
   <defs>
     <marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
