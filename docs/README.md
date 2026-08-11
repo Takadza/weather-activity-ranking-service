@@ -21,7 +21,7 @@ Start at the root [README.md](../README.md) for run instructions. Read design do
 |---|---|
 | GraphQL API | [contracts/schema.graphql](contracts/schema.graphql) |
 | Example queries | [contracts/examples.graphql](contracts/examples.graphql) |
-| Database models | [contracts/prisma-schema.md](contracts/prisma-schema.md) · ERD: [diagrams/04-erd.svg](diagrams/04-erd.svg) · live: [`prisma/schema.prisma`](../prisma/schema.prisma) |
+| Database models | [contracts/prisma-schema.md](contracts/prisma-schema.md) · ERD: [diagrams/04-erd.svg](diagrams/04-erd.svg) (`Location` 1:N `ForecastDay` / `GeocodeCache`; standalone `RefreshMeta`) · live: [`prisma/schema.prisma`](../prisma/schema.prisma) |
 | Manual API testing | [postman collection](../postman/weather-activity-ranking.postman_collection.json) - import steps in [root README](../README.md#postman-collection) |
 | Auth | `API_KEY` (`X-API-Key` / Bearer); `METRICS_TOKEN` for `/metrics` + health detail |
 | Framework | NestJS (GraphQL Apollo driver) - [02 ADR-004](02-system-design.md) |

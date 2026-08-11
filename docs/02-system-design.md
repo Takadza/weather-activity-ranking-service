@@ -68,7 +68,30 @@ Warm path is Postgres-only. Open-Meteo is used for scheduled refresh and bounded
 
 ![PostgreSQL ERD](diagrams/04-erd.svg)
 
-Four tables: `Location`, `ForecastDay` (7-day window, upsert on `(location_id, forecast_date)`), `GeocodeCache`, and singleton `RefreshMeta`. Full field list and Prisma SoT: [`contracts/prisma-schema.md`](contracts/prisma-schema.md).
+Four PostgreSQL tables. **`Location`** is the hub; scores are **compute-on-read** (no score table).
+
+```
+┌─────────────────┐       ┌──────────────────┐
+│    Location     │───1:N─│   ForecastDay    │
+└────────┬────────┘       └──────────────────┘
+         │
+         └────1:N──┌──────────────────┐
+                   │  GeocodeCache    │
+                   └──────────────────┘
+
+┌──────────────────┐
+│   RefreshMeta    │  ← singleton (id = 1), no FK
+└──────────────────┘
+```
+
+| Entity | Role | Relationship |
+|---|---|---|
+| `Location` | Canonical place (name, lat/lon, `tracked` flag) | Parent of forecasts and geocode best-match pointers |
+| `ForecastDay` | Raw Open-Meteo features for one calendar day | **1:N** from `Location` via `location_id` (cascade delete); upsert key `(location_id, forecast_date)` |
+| `GeocodeCache` | Cached geocode results for a normalized query (e.g. `"cape town"`) | **1:N** from `Location` via optional `best_location_id` |
+| `RefreshMeta` | Worker heartbeat (`last_success_at`, `last_error`, …) | Standalone singleton row — no foreign keys |
+
+Full field list and Prisma SoT: [`contracts/prisma-schema.md`](contracts/prisma-schema.md).
 
 #### Happy-path query (warm)
 

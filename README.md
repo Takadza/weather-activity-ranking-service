@@ -7,7 +7,29 @@ Rank the next 7 days for **skiing**, **surfing**, **outdoor sightseeing**, and *
 
 ![System context](docs/diagrams/01-context.svg)
 
-Warm path reads **PostgreSQL** only. **Open-Meteo** is used for scheduled refresh and bounded cold-start. Architecture, ERD, and sequence diagrams: [docs/02-system-design.md](docs/02-system-design.md#21-diagrams).
+Warm path reads **PostgreSQL** only. **Open-Meteo** is used for scheduled refresh and bounded cold-start. Architecture and sequence diagrams: [docs/02-system-design.md](docs/02-system-design.md#21-diagrams).
+
+### Database model (ERD)
+
+**`Location`** is the hub — one location has many forecast days and may be referenced as the best match from many geocode cache rows. **`RefreshMeta`** is a standalone worker heartbeat (no FK).
+
+```
+┌─────────────────┐       ┌──────────────────┐
+│    Location     │───1:N─│   ForecastDay    │
+└────────┬────────┘       └──────────────────┘
+         │
+         └────1:N──┌──────────────────┐
+                   │  GeocodeCache    │
+                   └──────────────────┘
+
+┌──────────────────┐
+│   RefreshMeta    │  ← singleton (id = 1), no FK
+└──────────────────┘
+```
+
+Scores are **compute-on-read** (no score table). Full field list: [docs/contracts/prisma-schema.md](docs/contracts/prisma-schema.md) · [system design §2.1](docs/02-system-design.md#database-erd).
+
+![PostgreSQL ERD](docs/diagrams/04-erd.svg)
 
 ---
 

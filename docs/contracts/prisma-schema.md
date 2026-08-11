@@ -16,33 +16,70 @@ Also linked from [system design §2.1](../02-system-design.md#21-diagrams).
 
 ```mermaid
 erDiagram
-  Location ||--o{ ForecastDay : has
-  Location ||--o| GeocodeCache : bestMatch
+  Location ||--o{ ForecastDay : "1:N"
+  Location ||--o{ GeocodeCache : "1:N"
+
   Location {
     uuid id PK
     string name
+    string country "nullable"
+    string admin1 "nullable"
     float latitude
     float longitude
     boolean tracked
   }
+
   ForecastDay {
-    uuid id PK
-    uuid locationId FK
-    date forecastDate
-    float tempMaxC
-    float precipMm
-    float waveHeightM
+    uuid location_id FK
+    date forecast_date
+    float temp_max_c
+    float precip_mm
+    float wind_max_kmh
+    float snowfall_cm
+    float wave_height_m
+    int weather_code
+    datetime fetched_at
   }
+
   GeocodeCache {
-    uuid id PK
-    string queryNormalized UK
-    jsonb resultsJson
+    string query_normalized UK
+    jsonb results_json
+    uuid best_location_id FK "nullable"
+    datetime fetched_at
   }
+
   RefreshMeta {
-    int id PK
-    datetime lastSuccessAt
+    int id PK "singleton (=1)"
+    datetime last_success_at "nullable"
+    datetime last_attempt_at "nullable"
+    string last_error "nullable"
   }
 ```
+
+**Layout (same relationships as the SVG):**
+
+```
+┌─────────────────┐       ┌──────────────────┐
+│    Location     │───1:N─│   ForecastDay    │
+└────────┬────────┘       └──────────────────┘
+         │
+         └────1:N──┌──────────────────┐
+                   │  GeocodeCache    │
+                   └──────────────────┘
+
+┌──────────────────┐
+│   RefreshMeta    │  ← singleton (id = 1), no FK
+└──────────────────┘
+```
+
+### Entity summary
+
+| Table | Key fields | Relationship |
+|---|---|---|
+| `Location` | `id`, `name`, `latitude`, `longitude`, `tracked` | Hub — parent of forecasts and geocode best-match pointers |
+| `ForecastDay` | `location_id`, `forecast_date`, weather features | **1:N** from `Location`; UK `(location_id, forecast_date)`; ON DELETE CASCADE |
+| `GeocodeCache` | `query_normalized`, `results_json`, `best_location_id` | **1:N** from `Location` via optional `best_location_id` |
+| `RefreshMeta` | `last_success_at`, `last_attempt_at`, `last_error` | Singleton (`id = 1`); no FK to other tables |
 
 ## Exact Prisma schema
 

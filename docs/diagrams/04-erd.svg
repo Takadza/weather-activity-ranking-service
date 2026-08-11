@@ -1,70 +1,99 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="520" viewBox="0 0 780 520" role="img" aria-labelledby="title desc">
   <title id="title">PostgreSQL ERD - v1 tables</title>
-  <desc id="desc">Entity relationships for Location, ForecastDay, GeocodeCache, and RefreshMeta. Scores are compute-on-read (no score table).</desc>
-  <rect width="920" height="520" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-  <text x="460" y="32" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">PostgreSQL ERD (v1)</text>
-  <text x="460" y="52" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">Scores are compute-on-read - no ActivityScoreDay table</text>
+  <desc id="desc">Entity relationships: Location one-to-many ForecastDay and GeocodeCache; RefreshMeta is a singleton with no foreign keys.</desc>
 
-  <defs>
-    <marker id="arrE" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
-      <path d="M0,0 L7,3 L0,6 Z" fill="#24292f"/>
-    </marker>
-  </defs>
+  <rect width="780" height="520" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
 
-  <!-- Location -->
-  <rect x="320" y="80" width="280" height="168" rx="6" fill="#f6f8fa" stroke="#24292f" stroke-width="2"/>
-  <rect x="320" y="80" width="280" height="32" rx="6" fill="#24292f"/>
-  <rect x="320" y="100" width="280" height="12" fill="#24292f"/>
-  <text x="460" y="102" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Location</text>
-  <text x="336" y="132" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">id : uuid PK</text>
-  <text x="336" y="150" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">name, country?, admin1?</text>
-  <text x="336" y="168" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">latitude, longitude UK</text>
-  <text x="336" y="186" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">tracked : boolean</text>
-  <text x="336" y="204" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#57606a">created_at, updated_at</text>
-  <text x="336" y="230" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">@@unique(lat, lon) - @@index(tracked)</text>
+  <text x="390" y="34" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="18" font-weight="700" fill="#24292f">PostgreSQL ERD (v1)</text>
+  <text x="390" y="54" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">Scores are compute-on-read — no ActivityScoreDay table</text>
 
-  <!-- ForecastDay -->
-  <rect x="40" y="300" width="300" height="180" rx="6" fill="#f6f8fa" stroke="#24292f" stroke-width="2"/>
-  <rect x="40" y="300" width="300" height="32" rx="6" fill="#24292f"/>
-  <rect x="40" y="320" width="300" height="12" fill="#24292f"/>
-  <text x="190" y="322" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">ForecastDay</text>
-  <text x="56" y="352" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">id : uuid PK</text>
-  <text x="56" y="370" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">location_id : uuid FK</text>
-  <text x="56" y="388" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">forecast_date : date</text>
-  <text x="56" y="406" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">temp, precip, wind, snow, waves&</text>
-  <text x="56" y="424" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">weather_code, raw_json?, fetched_at</text>
-  <text x="56" y="456" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">@@unique(location_id, forecast_date)</text>
+  <!-- ── Location ── -->
+  <g id="entity-location">
+    <rect x="50" y="80" width="220" height="168" rx="4" fill="#ffffff" stroke="#24292f" stroke-width="2"/>
+    <rect x="50" y="80" width="220" height="28" rx="4" fill="#24292f"/>
+    <rect x="50" y="96" width="220" height="12" fill="#24292f"/>
+    <text x="160" y="99" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">Location</text>
+    <line x1="50" y1="108" x2="270" y2="108" stroke="#d0d7de" stroke-width="1"/>
+    <text x="64" y="128" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f"><tspan font-weight="700" text-decoration="underline">id</tspan> (uuid)</text>
+    <text x="64" y="146" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">name</text>
+    <text x="64" y="164" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">country, admin1</text>
+    <text x="64" y="182" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">latitude</text>
+    <text x="64" y="200" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">longitude</text>
+    <text x="64" y="218" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">tracked (bool)</text>
+    <text x="64" y="238" font-family="Verdana, Geneva, sans-serif" font-size="10" fill="#57606a">UK (latitude, longitude)</text>
+  </g>
 
-  <!-- GeocodeCache -->
-  <rect x="580" y="300" width="300" height="160" rx="6" fill="#f6f8fa" stroke="#24292f" stroke-width="2"/>
-  <rect x="580" y="300" width="300" height="32" rx="6" fill="#24292f"/>
-  <rect x="580" y="320" width="300" height="12" fill="#24292f"/>
-  <text x="730" y="322" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">GeocodeCache</text>
-  <text x="596" y="352" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">id : uuid PK</text>
-  <text x="596" y="370" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">query_normalized : string UK</text>
-  <text x="596" y="388" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">results_json : jsonb</text>
-  <text x="596" y="406" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">best_location_id : uuid FK?</text>
-  <text x="596" y="424" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">fetched_at</text>
-  <text x="596" y="444" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">optional best-match -> Location</text>
+  <!-- ── ForecastDay ── -->
+  <g id="entity-forecast-day">
+    <rect x="400" y="80" width="250" height="210" rx="4" fill="#ffffff" stroke="#24292f" stroke-width="2"/>
+    <rect x="400" y="80" width="250" height="28" rx="4" fill="#24292f"/>
+    <rect x="400" y="96" width="250" height="12" fill="#24292f"/>
+    <text x="525" y="99" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">ForecastDay</text>
+    <line x1="400" y1="108" x2="650" y2="108" stroke="#d0d7de" stroke-width="1"/>
+    <text x="414" y="128" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f"><tspan font-weight="700">location_id</tspan> (FK)</text>
+    <text x="414" y="146" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">forecast_date</text>
+    <text x="414" y="164" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">temp_max_c</text>
+    <text x="414" y="182" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">precip_mm</text>
+    <text x="414" y="200" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">wind_max_kmh</text>
+    <text x="414" y="218" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">snowfall_cm</text>
+    <text x="414" y="236" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">wave_height_m</text>
+    <text x="414" y="254" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">weather_code</text>
+    <text x="414" y="272" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#57606a">fetched_at</text>
+  </g>
 
-  <!-- RefreshMeta -->
-  <rect x="360" y="300" width="180" height="120" rx="6" fill="#f6f8fa" stroke="#24292f" stroke-width="2"/>
-  <rect x="360" y="300" width="180" height="32" rx="6" fill="#24292f"/>
-  <rect x="360" y="320" width="180" height="12" fill="#24292f"/>
-  <text x="450" y="322" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">RefreshMeta</text>
-  <text x="376" y="352" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">id : int PK (=1)</text>
-  <text x="376" y="370" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">last_success_at?</text>
-  <text x="376" y="388" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">last_attempt_at?</text>
-  <text x="376" y="406" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">last_error?</text>
+  <!-- ── GeocodeCache ── -->
+  <g id="entity-geocode-cache">
+    <rect x="50" y="330" width="250" height="150" rx="4" fill="#ffffff" stroke="#24292f" stroke-width="2"/>
+    <rect x="50" y="330" width="250" height="28" rx="4" fill="#24292f"/>
+    <rect x="50" y="346" width="250" height="12" fill="#24292f"/>
+    <text x="175" y="349" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">GeocodeCache</text>
+    <line x1="50" y1="358" x2="300" y2="358" stroke="#d0d7de" stroke-width="1"/>
+    <text x="64" y="378" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">query_normalized</text>
+    <text x="210" y="378" font-family="Verdana, Geneva, sans-serif" font-size="10" fill="#57606a">← "cape town"</text>
+    <text x="64" y="396" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">results_json</text>
+    <text x="170" y="396" font-family="Verdana, Geneva, sans-serif" font-size="10" fill="#57606a">← full candidate list</text>
+    <text x="64" y="414" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f"><tspan font-weight="700">best_location_id</tspan> (FK?)</text>
+    <text x="64" y="432" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#57606a">fetched_at</text>
+  </g>
 
-  <!-- Relationships -->
-  <line x1="340" y1="248" x2="190" y2="300" stroke="#24292f" stroke-width="2" marker-end="url(#arrE)"/>
-  <text x="220" y="275" font-family="Verdana, Geneva, sans-serif" font-size="11" font-weight="700" fill="#24292f">1 - *</text>
+  <!-- ── RefreshMeta (standalone) ── -->
+  <g id="entity-refresh-meta">
+    <rect x="400" y="350" width="250" height="130" rx="4" fill="#fffdf5" stroke="#24292f" stroke-width="2" stroke-dasharray="7 4"/>
+    <rect x="400" y="350" width="250" height="28" rx="4" fill="#57606a"/>
+    <rect x="400" y="366" width="250" height="12" fill="#57606a"/>
+    <text x="525" y="369" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="13" font-weight="700" fill="#ffffff">RefreshMeta</text>
+    <line x1="400" y1="378" x2="650" y2="378" stroke="#d0d7de" stroke-width="1"/>
+    <text x="414" y="398" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">last_success_at</text>
+    <text x="414" y="416" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">last_attempt_at</text>
+    <text x="414" y="434" font-family="Verdana, Geneva, sans-serif" font-size="12" fill="#24292f">last_error</text>
+    <text x="414" y="462" font-family="Verdana, Geneva, sans-serif" font-size="10" font-style="italic" fill="#57606a">← singleton row (id = 1), no FK</text>
+  </g>
 
-  <line x1="580" y1="248" x2="730" y2="300" stroke="#24292f" stroke-width="2" marker-end="url(#arrE)"/>
-  <text x="640" y="275" font-family="Verdana, Geneva, sans-serif" font-size="11" font-weight="700" fill="#24292f">0..1 - *</text>
+  <!-- ── Relationship: Location 1 ── N ForecastDay ── -->
+  <g id="rel-location-forecast">
+    <line x1="270" y1="164" x2="400" y2="164" stroke="#24292f" stroke-width="2"/>
+    <!-- crow's foot (many) on ForecastDay side -->
+    <line x1="400" y1="164" x2="388" y2="154" stroke="#24292f" stroke-width="2"/>
+    <line x1="400" y1="164" x2="388" y2="164" stroke="#24292f" stroke-width="2"/>
+    <line x1="400" y1="164" x2="388" y2="174" stroke="#24292f" stroke-width="2"/>
+    <!-- one marker on Location side -->
+    <line x1="280" y1="154" x2="280" y2="174" stroke="#24292f" stroke-width="2"/>
+    <text x="318" y="152" font-family="Verdana, Geneva, sans-serif" font-size="11" font-weight="700" fill="#24292f">1</text>
+    <text x="360" y="152" font-family="Verdana, Geneva, sans-serif" font-size="11" font-weight="700" fill="#24292f">N</text>
+  </g>
 
-  <text x="450" y="280" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">singleton (no FK)</text>
+  <!-- ── Relationship: Location 1 ── N GeocodeCache ── -->
+  <g id="rel-location-geocode">
+    <line x1="160" y1="248" x2="160" y2="330" stroke="#24292f" stroke-width="2"/>
+    <!-- crow's foot (many) on GeocodeCache side -->
+    <line x1="160" y1="330" x2="150" y2="318" stroke="#24292f" stroke-width="2"/>
+    <line x1="160" y1="330" x2="170" y2="318" stroke="#24292f" stroke-width="2"/>
+    <line x1="160" y1="330" x2="160" y2="318" stroke="#24292f" stroke-width="2"/>
+    <!-- one marker on Location side -->
+    <line x1="150" y1="268" x2="170" y2="268" stroke="#24292f" stroke-width="2"/>
+    <text x="178" y="272" font-family="Verdana, Geneva, sans-serif" font-size="11" font-weight="700" fill="#24292f">1</text>
+    <text x="178" y="300" font-family="Verdana, Geneva, sans-serif" font-size="11" font-weight="700" fill="#24292f">N</text>
+  </g>
 
-  <text x="460" y="505" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="11" fill="#57606a">Canonical detail: docs/contracts/prisma-schema.md - prisma/schema.prisma</text>
+  <text x="390" y="505" text-anchor="middle" font-family="Verdana, Geneva, sans-serif" font-size="10" fill="#57606a">Canonical detail: docs/contracts/prisma-schema.md · prisma/schema.prisma</text>
 </svg>
