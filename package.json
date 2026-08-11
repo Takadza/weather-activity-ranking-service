@@ -25,7 +25,7 @@
     "test:integration": "jest --config ./test/jest-integration.json --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "test:all": "npm test && npm run test:integration && npm run test:e2e",
-    "postinstall": "prisma generate"
+    "postinstall": "DATABASE_URL=postgresql://unused:unused@localhost:5432/unused prisma generate"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

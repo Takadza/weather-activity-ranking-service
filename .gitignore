@@ -6,12 +6,23 @@ node_modules/
 /build
 *.tsbuildinfo
 
-# Env
+# Env & local secrets (never commit)
 .env
 .env.*
 !.env.example
 .env.local
 .env.*.local
+
+# Credentials & key material
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+credentials*.json
+secrets/
+.secrets/
+*.secret
 
 # Logs / coverage
 logs/
@@ -30,4 +41,3 @@ coverage/
 .cursor/
 
 # Misc
-*.pem
