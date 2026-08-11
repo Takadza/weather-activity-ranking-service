@@ -1,0 +1,52 @@
+@startuml 04-erd
+' Presentation artifact: docs/diagrams/04-erd.svg (hand-authored for GitHub).
+' This .puml is a structural sketch only - prefer editing the SVG for layout.
+!theme plain
+skinparam linetype ortho
+left to right direction
+title PostgreSQL ERD (v1) - scores compute-on-read (no score table)
+
+entity Location {
+  * **id** : uuid <<PK>>
+  --
+  name : string
+  country, admin1 : string?
+  latitude : float
+  longitude : float
+  tracked : boolean
+}
+
+entity ForecastDay {
+  location_id : uuid <<FK>>
+  forecast_date : date
+  temp_max_c : float?
+  precip_mm : float?
+  wind_max_kmh : float?
+  snowfall_cm : float?
+  wave_height_m : float?
+  weather_code : int?
+  fetched_at : datetime
+}
+
+entity GeocodeCache {
+  query_normalized : string <<UK>>
+  results_json : jsonb
+  best_location_id : uuid? <<FK>>
+  fetched_at : datetime
+}
+
+entity RefreshMeta {
+  last_success_at : datetime?
+  last_attempt_at : datetime?
+  last_error : string?
+}
+
+Location ||--o{ ForecastDay : "1:N"
+Location ||--o{ GeocodeCache : "1:N"
+
+note bottom of RefreshMeta
+  Singleton row (id = 1).
+  No FK to other tables.
+end note
+
+@enduml

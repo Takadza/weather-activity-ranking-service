@@ -4,8 +4,8 @@ import { LocationsRepository } from '../store/locations.repository';
 import { RefreshMetaRepository } from '../store/refresh-meta.repository';
 
 export type HealthRefreshPayload = {
-  lastSuccessAt: string | null;
-  lastAttemptAt: string | null;
+  lastSuccessAt: Date | null;
+  lastAttemptAt: Date | null;
   lastError: string | null;
   trackedLocationCount: number;
 };
@@ -41,12 +41,8 @@ export class HealthService {
     );
     const now = Date.now();
 
-    const lastSuccessAt = meta.lastSuccessAt
-      ? meta.lastSuccessAt.toISOString()
-      : null;
-    const lastAttemptAt = meta.lastAttemptAt
-      ? meta.lastAttemptAt.toISOString()
-      : null;
+    const lastSuccessAt = meta.lastSuccessAt;
+    const lastAttemptAt = meta.lastAttemptAt;
 
     const status = this.computeStatus({
       trackedLocationCount,

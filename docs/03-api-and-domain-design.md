@@ -60,6 +60,40 @@ Consumers **must** handle freshness fields on every successful ranking payload: 
 
 ![PostgreSQL ERD](diagrams/04-erd.svg)
 
+### 4.1 Entities & relationships
+
+**`Location`** is the central entity. Everything else hangs off it or stands alone:
+
+```
+┌─────────────────┐       ┌──────────────────┐
+│    Location     │───1:N─│   ForecastDay    │
+│  id, name       │       │  location_id     │
+│  lat, lon       │       │  forecast_date   │
+│  tracked        │       │  temp, precip…   │
+└────────┬────────┘       └──────────────────┘
+         │
+         └────1:N──┌──────────────────┐
+                   │  GeocodeCache    │
+                   │  query_normalized│  ← e.g. "cape town"
+                   │  results_json    │  ← full candidate list
+                   │  best_location_id│
+                   └──────────────────┘
+
+┌──────────────────┐
+│   RefreshMeta    │  ← singleton row (id = 1), no FK
+│  last_success_at │
+│  last_attempt_at │
+│  last_error      │
+└──────────────────┘
+```
+
+| Table | Purpose |
+|---|---|
+| `Location` | Resolved place identity. Becomes **tracked** when first looked up by name (refresh worker iterates tracked rows only). |
+| `ForecastDay` | Up to **7 days** of raw weather per location. Upserted by worker and cold-start; read by scorer on every query. |
+| `GeocodeCache` | Avoids repeat Open-Meteo geocode calls. Stores normalized query → candidate list + optional pointer to the chosen `Location`. |
+| `RefreshMeta` | Operational metadata for the background refresh worker (not part of the ranking domain graph). |
+
 **v1 storage policy:** keep **current 7-day window only** per location (`01` §5.4). No historical retention.
 
 **Scores:** **compute-on-read** from `ForecastDay` via pure scorer (no `ActivityScoreDay` table in v1).

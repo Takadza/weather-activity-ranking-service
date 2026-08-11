@@ -118,7 +118,7 @@ describe('HealthService.getHealth', () => {
     const result = await service.getHealth();
 
     expect(result.status).toBe('degraded');
-    expect(result.refresh.lastSuccessAt).toBe(lastSuccessAt.toISOString());
+    expect(result.refresh.lastSuccessAt).toBe(lastSuccessAt);
   });
 
   it('returns ok when tracked, success fresh, even with a recent partial lastError', async () => {
@@ -139,7 +139,7 @@ describe('HealthService.getHealth', () => {
 
     expect(result.status).toBe('ok');
     expect(result.refresh.lastError).toBe('loc-b: provider down');
-    expect(result.refresh.lastAttemptAt).toBe(lastAttemptAt.toISOString());
+    expect(result.refresh.lastAttemptAt).toBe(lastAttemptAt);
   });
 
   it('returns ok when tracked, success fresh, and no recent error', async () => {
@@ -160,8 +160,8 @@ describe('HealthService.getHealth', () => {
     expect(result).toEqual({
       status: 'ok',
       refresh: {
-        lastSuccessAt: lastSuccessAt.toISOString(),
-        lastAttemptAt: lastSuccessAt.toISOString(),
+        lastSuccessAt,
+        lastAttemptAt: lastSuccessAt,
         lastError: null,
         trackedLocationCount: 5,
       },
